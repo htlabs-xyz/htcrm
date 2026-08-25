@@ -38,6 +38,7 @@ export class AgentAccessService {
 			FROM "member"
 			WHERE "organizationId" = ${WORKSPACE_ID}
 				AND "userId" = ${userId}
+			FOR SHARE
 		`;
 
 		if (!member) {

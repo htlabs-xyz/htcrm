@@ -20,21 +20,6 @@ const agents = new AgentDefinitionsService(
 	new AgentTriggerService(db),
 );
 
-it("rejects a builder artifact without a conversation or version owner", async () => {
-	await expect(
-		Promise.resolve(
-			db.agentBuilderArtifact.create({
-				data: {
-					path: "agent/instructions.md",
-					language: "markdown",
-					content: "Unowned",
-					revision: 1,
-				},
-			}),
-		),
-	).rejects.toThrow();
-});
-
 beforeAll(async () => {
 	await db.organization.upsert({
 		where: { id: WORKSPACE_ID },

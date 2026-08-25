@@ -1,18 +1,15 @@
 import "@crm/env/load";
 
 import path from "node:path";
-import { defineConfig } from "prisma/config";
-
-const localDatabase = process["env"].D1_LOCAL_DATABASE_PATH;
+import { defineConfig, env } from "prisma/config";
 
 export default defineConfig({
 	schema: path.join("prisma", "schema.prisma"),
 	migrations: {
 		path: path.join("prisma", "migrations"),
+		seed: "bun run prisma/seed.ts",
 	},
 	datasource: {
-		url: localDatabase
-			? `file:${localDatabase}`
-			: "file:./d1-placeholder.sqlite",
+		url: env("DATABASE_URL"),
 	},
 });

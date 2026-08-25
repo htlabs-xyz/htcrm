@@ -107,6 +107,7 @@ export async function writeBuilderArtifact(
 			WHERE id = ${conversationId}
 				AND "userId" = ${userId}
 				AND kind = 'BUILDER'
+			FOR UPDATE
 		`;
 		if (!conversation) {
 			throw new Error("This builder conversation is unavailable.");
@@ -273,6 +274,7 @@ export async function saveBuilderDraft(
 			WHERE id = ${conversationId}
 				AND "userId" = ${userId}
 				AND kind = 'BUILDER'
+			FOR UPDATE
 		`;
 		if (!lockedConversation) {
 			throw new Error("This builder conversation is unavailable.");
@@ -306,6 +308,7 @@ export async function saveBuilderDraft(
 				SELECT status
 				FROM "agentDefinition"
 				WHERE id = ${agentId}
+				FOR UPDATE
 			`;
 			if (!agent || agent.status === "DELETED") {
 				throw new Error("This agent is unavailable.");

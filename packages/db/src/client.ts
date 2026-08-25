@@ -1,73 +1,60 @@
 import "@crm/env/load";
 
-import { PrismaD1 } from "@prisma/adapter-d1";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { type Prisma, PrismaClient } from "./generated/prisma/client";
-import { findLocalD1Database } from "./local-d1";
-import {
-	executeCoordinatedTransaction,
-	type TransactionArguments,
-	type TransactionExecutor,
-} from "./transaction-lease";
 
-const runtimeEnvironment = process["env"];
-const runningTests = runtimeEnvironment.NODE_ENV === "test";
-const production = runtimeEnvironment.NODE_ENV === "production";
-const nextProductionBuild =
-	runtimeEnvironment.NEXT_PHASE === "phase-production-build";
-const cloudflareToken =
-	runtimeEnvironment.CLOUDFLARE_D1_TOKEN?.trim() ||
-	runtimeEnvironment.CLOUDFLARE_TOKEN?.trim();
-const hasRemoteCredentials = Boolean(
-	runtimeEnvironment.CLOUDFLARE_ACCOUNT_ID &&
-		cloudflareToken &&
-		runtimeEnvironment.CLOUDFLARE_DATABASE_ID,
-);
-const localDatabase = localDatabasePath();
-const adapter = localDatabase
-	? new (await import("@prisma/adapter-libsql")).PrismaLibSql({
-			url: `file:${localDatabase}`,
-		})
-	: new PrismaD1(d1Credentials());
+const connectionString =
+	process.env.NODE_ENV === "test" ? testDatabase() : liveDatabase();
 
-function d1Credentials() {
-	const accountId = required("CLOUDFLARE_ACCOUNT_ID");
-	const token = cloudflareToken ?? required("CLOUDFLARE_D1_TOKEN");
-	const databaseId = required("CLOUDFLARE_DATABASE_ID");
+function liveDatabase(): string {
+	const url = process.env.DATABASE_URL;
 
-	return {
-		CLOUDFLARE_ACCOUNT_ID: accountId,
-		CLOUDFLARE_D1_TOKEN: token,
-		CLOUDFLARE_DATABASE_ID: databaseId,
-	};
-}
-
-function localDatabasePath(): string | null {
-	const explicit = runtimeEnvironment.D1_LOCAL_DATABASE_PATH?.trim() || null;
-	if (production && !nextProductionBuild) {
-		if (explicit) {
-			throw new Error("D1_LOCAL_DATABASE_PATH cannot be used in production.");
-		}
-		return null;
+	if (!url) {
+		throw new Error(
+			"DATABASE_URL is not set. Copy .env.example to .env at the root of the repo and fill it in, or set DATABASE_URL in the environment.",
+		);
 	}
 
-	if (!runningTests) {
-		return explicit ?? (hasRemoteCredentials ? null : findLocalD1Database());
-	}
-
-	const testDatabase = explicit ?? findLocalD1Database();
-	if (testDatabase) return testDatabase;
-	throw new Error(
-		"Tests require a local D1 database. Run bun run db:test before the test suite.",
-	);
+	return url;
 }
 
-function required(name: string): string {
-	const value = runtimeEnvironment[name];
-	if (value) return value;
+function testDatabase(): string {
+	const url = process.env.TEST_DATABASE_URL;
 
-	throw new Error(
-		`${name} is not set. Add it to the root environment file before using @crm/db.`,
-	);
+	if (!url) {
+		throw new Error(
+			[
+				"TEST_DATABASE_URL is not set, and the suite will not fall back to DATABASE_URL.",
+				"",
+				"These are real integration tests. They delete every workspace member and the",
+				"organization row and put them back when the run finishes — so a run that is",
+				"interrupted leaves everybody locked out of whatever database it was pointed at.",
+				"The pre-push hook runs them, so that is one `git push` away from a database you",
+				"care about.",
+				"",
+				"Make a throwaway one and point TEST_DATABASE_URL at it:",
+				"",
+				"    bun run db:test",
+				"",
+			].join("\n"),
+		);
+	}
+
+	if (!databaseName(url).endsWith("_test")) {
+		throw new Error(
+			`TEST_DATABASE_URL must name a database ending in _test, so it cannot be one somebody is using. It names "${databaseName(url)}".`,
+		);
+	}
+
+	return url;
+}
+
+function databaseName(url: string): string {
+	try {
+		return new URL(url).pathname.replace(/^\//, "");
+	} catch {
+		return url;
+	}
 }
 
 export interface PrismaLogRecord {
@@ -98,7 +85,7 @@ export function setPrismaLogSink(next: PrismaLogSink | null): void {
 	sink = next ?? consoleSink;
 }
 
-const logQueries = runtimeEnvironment.PRISMA_LOG_QUERIES === "true";
+const logQueries = process.env.PRISMA_LOG_QUERIES === "true";
 
 const logDefinitions: Prisma.LogDefinition[] = [
 	{ level: "warn", emit: "event" },
@@ -113,7 +100,7 @@ const logDefinitions: Prisma.LogDefinition[] = [
 
 const createPrismaClient = () => {
 	const client = new PrismaClient({
-		adapter,
+		adapter: new PrismaPg({ connectionString }),
 		log: logDefinitions,
 	});
 
@@ -130,24 +117,7 @@ const createPrismaClient = () => {
 		sink({ level: "query", message: query, target, durationMs: duration });
 	});
 
-	const transaction = client.$transaction.bind(client) as TransactionExecutor<
-		typeof client
-	>;
-	return new Proxy(client, {
-		get(target, property, receiver) {
-			if (property !== "$transaction") {
-				return Reflect.get(target, property, receiver);
-			}
-
-			return (...arguments_: TransactionArguments<typeof client>) =>
-				executeCoordinatedTransaction(
-					client,
-					transaction,
-					arguments_,
-					localDatabase !== null,
-				);
-		},
-	}) as typeof client;
+	return client;
 };
 
 declare global {
@@ -156,7 +126,7 @@ declare global {
 
 export const db = globalThis.prisma ?? createPrismaClient();
 
-if (runtimeEnvironment.NODE_ENV !== "production") {
+if (process.env.NODE_ENV !== "production") {
 	globalThis.prisma = db;
 }
 

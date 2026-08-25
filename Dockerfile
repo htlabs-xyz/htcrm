@@ -48,6 +48,8 @@ FROM build-dependencies AS source
 
 COPY . .
 
+ENV DATABASE_URL=postgresql://localhost:5432/ci
+
 RUN bun run --filter=@crm/db db:generate
 
 FROM migration-dependencies AS migration
@@ -64,8 +66,6 @@ RUN bun run --filter=api build
 
 FROM source AS agent-builder
 
-ENV D1_LOCAL_DATABASE_PATH=/tmp/docker-build.db
-
 RUN bun run --filter=agent build
 
 FROM source AS app-builder
@@ -77,7 +77,6 @@ ENV API_URL=${INTERNAL_API_URL}
 ENV NEXT_PUBLIC_API_URL=${PUBLIC_API_URL}
 ENV BETTER_AUTH_SECRET=docker-build-only-placeholder-secret-000000000000
 ENV ALLOWED_SIGN_IN=build.invalid
-ENV D1_LOCAL_DATABASE_PATH=/tmp/docker-build.db
 
 RUN bun run --filter=app build
 

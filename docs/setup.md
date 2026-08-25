@@ -7,56 +7,22 @@ reads once.
 ## First run
 
 ```sh
-# Copy the committed environment template to the repository root, then fill both secrets and ALLOWED_SIGN_IN.
+cp .env.example .env        # fill DATABASE_URL, BETTER_AUTH_SECRET, ALLOWED_SIGN_IN
+docker compose up -d        # Postgres, matching .env.example
 bun run db:migrate && bun run db:seed
 bun run dev                 # app :3000, api :3001, agent :2000
 ```
 
-`CLOUDFLARE_DATABASE_NAME` names the local D1 database. Wrangler stores it under
-`packages/db/.wrangler`, and `@crm/db` discovers that SQLite file automatically.
-No Cloudflare account or token is needed for local development.
-
-Prisma and D1 commands from the repo root:
-
-| Command | Target |
-| --- | --- |
-| `db:generate` | Generate the Prisma client |
-| `db:migrate` / `db:push` | Apply pending migrations to local D1 |
-| `db:migration:create -- <name>` | Create a Wrangler D1 migration |
-| `db:reset` | Back up and rebuild local D1 |
-| `db:seed` | Migrate and seed local D1 |
-| `db:studio` | Inspect local D1 |
-| `db:deploy` | Explicitly apply migrations to remote D1 |
-| `db:seed:remote` | Explicitly migrate and seed remote D1 |
+Prisma from the repo root: `db:generate`, `db:migrate`, `db:push`, `db:reset`,
+`db:seed`, `db:studio`, `db:deploy`.
 
 `dev` depends on `^dev:prepare`, so every start applies pending migrations and
-regenerates the Prisma client before a server boots. The explicit first migration
-is needed only for the seed that follows it. `db:reset` copies the existing local
-Wrangler state to `packages/db/.d1-backups` before rebuilding it.
-
-## Transaction coordination
-
-D1 does not provide row locks, and Prisma's D1 adapter does not make an
-interactive transaction atomic. The API and agent therefore serialize their
-transaction-sensitive writes through `packages/db/coordinator.ts`, a Worker
-backed by a SQLite Durable Object namespace.
-
-Local development uses the coordinator at `http://127.0.0.1:8788` when
-`D1_COORDINATOR_URL` and `D1_COORDINATOR_SECRET` are set. The root `dev` task starts
-that Worker with the other applications. Tests always use a single-process mutex;
-the coordinator Worker has its own isolated runtime suite.
-
-Production requires the coordinator URL and the same secret on every Node/Vercel
-consumer. Deploying it is explicit:
-
-```sh
-bun run --filter=@crm/db coordinator:deploy
-bun run --filter=@crm/db coordinator:secret
-```
-
-The Durable Object lease prevents concurrent writers across application instances.
-It does not add rollback to a failed multi-statement Prisma write, so critical paths
-also use idempotency keys and conditional updates.
+regenerates the Prisma client before a single server boots. That is why the first
+run needs `db:migrate` only for the seed that follows it. When the database and
+`schema.prisma` have diverged past what `migrate deploy` can reconcile,
+`dev:prepare` stops the whole run rather than starting servers against a schema
+they do not match — reconcile with `db:migrate`, or `db:reset` when the divergence
+is an edited migration that has already been applied.
 
 ## Google Cloud
 
@@ -118,32 +84,67 @@ bun run --filter=agent dispatch    # exact production path, both lanes, real cre
 Its printed `sessionIds` are research rows only, so a run that resolved forty logos
 prints an empty list and was not idle. `eve start` and Vercel do run the schedule.
 
-## Keep production D1 credentials out of local overrides
+## `vercel env pull` writes `.env.local`, which wins
 
-The local override file loads last. A Vercel environment pull writes production
-values there by default. A complete Cloudflare credential set makes application
-processes use remote D1. Pull into an inert file instead.
+`.env.local` is the override the loader reads *last*, and `vercel env pull` writes
+**production** credentials there by default. Pull once and every process silently
+points at production — not as an error, but as `bun run dev` working perfectly against
+the live database. On 2026-08-01 eleven migrations landed on Neon from a laptop.
 
-Local database commands always pass Wrangler's `--local` flag. Only `db:deploy` and
-`db:seed:remote` can modify remote D1.
+1. **Pull somewhere inert**: `vercel env pull .env.vercel`.
+2. **`packages/db/scripts/require-local-db.ts` guards `db:migrate`, `db:push`,
+   `db:reset`, `db:seed`** and takes `ALLOW_REMOTE_DB=1`. `db:deploy` is unguarded on
+   purpose. It reads the root files directly rather than `process.env`, because Bun
+   auto-loads the working directory's `.env` while Prisma's CLI only sees
+   `@crm/env/load`.
 
 ## Migrations run on the production deploy, and nowhere else
 
-`apps/api/scripts/build-func.mjs` runs `db:deploy` only when Vercel reports a
-production deployment, the database name, and all three D1 credentials are present.
-Preview builds do not mutate remote D1. Wrangler records applied files in
-`d1_migrations`; migration
-SQL remains the deployment authority because Prisma Migrate does not target D1.
+`apps/api/scripts/build-func.mjs` runs `prisma migrate deploy` during the crm-api
+build, gated on `VERCEL_ENV === "production"`. The schema therefore moves when the
+release pull request merges and `release` deploys — with the code that needs it,
+and once rather than once per branch.
+
+Preview deploys share the production database: `DATABASE_URL` is a single value
+across production, preview and development. Until that changes, **a preview of a
+branch that adds a migration runs against a database without those tables** — it
+builds, and the pages that touch them fail. Test schema changes locally, where
+`bun run dev` migrates for you. Before the gate existed the reverse was true and
+worse: every preview applied its own migrations to the production database, so on
+2026-08-07 the live schema ran six migrations ahead of the live code all day.
+
+### `migrate deploy` is not proof the schema is right
+
+The build follows the deploy with `prisma migrate diff --exit-code` against
+`schema.prisma` and shouts in the build log when they disagree. **`No pending
+migrations to apply` only means `_prisma_migrations` has a row for every file** —
+it says nothing about what the tables actually look like.
+
+They came apart once. A `prisma db push` shaped production from a laptop, the
+migration rows were recorded as applied without their SQL ever running, and
+`agentConversationAttachment` went live without its `position` column. Every deploy
+reported nothing pending, for days, while `conversations.builderById` returned 500.
+The tell is an object in the database that no migration defines — there was an
+`agentConversationAttachment_submissionId_createdAt_idx` that appears in no
+migration file, only in a `db push` of an older schema.
+
+Reconciling is one command, and it is worth reading before running:
+
+```sh
+DATABASE_URL="…" bunx prisma migrate diff \
+  --from-config-datasource --to-schema prisma/schema.prisma --script
+```
 
 ## Portainer
 
-`docker-compose.portainer.yml` runs the web app, API, agent, remote D1
-migrations, and the API schedules. The D1 coordinator remains a Cloudflare Worker.
+`docker-compose.portainer.yml` runs PostgreSQL, the web app, API, agent,
+Prisma migrations, and the API schedules.
 
 Create a Portainer Git stack from this repository. Select
 `docker-compose.portainer.yml` as the Compose path. Add every required stack variable
-reported by Portainer before deployment. Keep all secret values in Portainer. Do not
-write them into the YAML file.
+reported by Portainer before deployment. `POSTGRES_PASSWORD` must be URL-safe because
+the stack uses it in `DATABASE_URL`; `openssl rand -hex 32` generates a suitable
+value. Keep all secret values in Portainer. Do not write them into the YAML file.
 
 Publish the app and API ports through your reverse proxy. The agent stays on the
 private Compose network, and the app proxies agent requests.
@@ -154,7 +155,8 @@ Set `APP_PUBLIC_URL` and `API_PUBLIC_URL` to the external HTTPS origins. Configu
 same origins in the OAuth providers. The API uses its in-memory cache because the
 stack runs one API instance.
 
-The one-shot `migration` service applies remote D1 migrations before the API starts.
+The one-shot `migration` service runs `prisma migrate deploy` after PostgreSQL is
+healthy and before the API starts. The `postgres-data` volume persists database data.
 The `scheduler` service replaces the schedules from `apps/api/vercel.json`. The built
 agent server also starts its dispatch schedule.
 
@@ -164,18 +166,41 @@ from `build` entries.
 
 ## Secrets hygiene
 
-Git ignores root environment files except the committed template. The template ships
-empty secret placeholders, asserted by `packages/env/test/root.spec.ts`. Generate
-your own secrets and never reuse tutorial or production values.
+`.gitignore` ignores `.env` and `.env.*` with one negation for `.env.example`, so
+`.env.bak` is ignored too. `.env.example` ships no secret — placeholders are empty
+strings, asserted by `packages/env/test/root.spec.ts`. **Generate your own secret**;
+never reuse one from an example, a tutorial, or another environment.
 
 ## Tests
 
 ```sh
 bun run --filter=api test
-bun run --filter=agent test
+bun run --filter=agent test    # integration specs need DATABASE_URL + real Postgres
 ```
 
 ### The test database rebuilds itself when it drifts
 
-`bun run db:test` backs up the current local Wrangler state, rebuilds local D1, and
-applies every migration. It never reads or mutates a remote database.
+`bun run db:test` creates `crm_test` and runs `migrate deploy` on it. The database
+name must end in `_test`; the suite deletes rows it expects to put back, so it
+refuses anything else.
+
+**`migrate deploy` only applies migrations that are missing. It never removes a
+table, a column or a constraint the database has and the schema does not.** A
+`crm_test` built on a branch that was later abandoned therefore keeps that branch's
+objects forever, and `db:test` used to report `already exists` and move on. The
+extra objects are invisible until one of them rejects a write, and then the failure
+names a constraint that appears in no migration and in no schema — a stray
+`trackedEvent_visitorId_fkey` once failed seven tracking specs this way, on every
+branch, for as long as the database survived.
+
+So `db:test` now checks the database it found and rebuilds it when either is true:
+
+- **It holds a migration this branch does not have.** The database came from
+  another branch. The name of the first one is printed.
+- **It no longer matches `schema.prisma`**, by `prisma migrate diff`. Something
+  was pushed or altered by hand.
+
+A rebuild drops the database and re-runs every migration, and it says which of the
+two reasons fired. Force one with `bun run db:test --reset`. Nothing else in the
+repo may drop a database, and this may only because the `_test` suffix is checked
+first.

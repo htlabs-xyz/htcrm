@@ -17,11 +17,9 @@
 		"db:deploy": "turbo run db:deploy",
 		"db:generate": "turbo run db:generate",
 		"db:migrate": "turbo run db:migrate",
-		"db:migration:create": "turbo run db:migration:create",
 		"db:push": "turbo run db:push",
 		"db:reset": "turbo run db:reset",
 		"db:seed": "turbo run db:seed",
-		"db:seed:remote": "turbo run db:seed:remote",
 		"db:studio": "turbo run db:studio",
 		"db:test": "bun run --filter=@crm/db db:test"
 	},

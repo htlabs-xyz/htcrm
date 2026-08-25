@@ -31,7 +31,7 @@ const nextConfig: NextConfig = {
 
 	transpilePackages: ["@crm/auth", "@crm/db", "@crm/telemetry", "@crm/ui"],
 
-	serverExternalPackages: ["@prisma/client"],
+	serverExternalPackages: ["@prisma/client", "@prisma/adapter-pg", "pg"],
 
 	images: {
 		remotePatterns: [

@@ -19,6 +19,7 @@ export async function lockAgentRun(
 		SELECT id, "agentId", "versionId", status, "sessionId", "startedAt", "nextEventSequence"
 		FROM "agentRun"
 		WHERE id = ${runId}
+		FOR UPDATE
 	`;
 	if (!run) throw new Error("This agent run is unavailable.");
 	return run;

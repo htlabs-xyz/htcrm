@@ -246,7 +246,7 @@ export class TrackingFilingService {
 	): Promise<string | null> {
 		const [contact, host] = await Promise.all([
 			this.db.suppressedContact.findFirst({
-				where: { email: { equals: email } },
+				where: { email: { equals: email, mode: "insensitive" } },
 				select: { email: true },
 			}),
 			this.db.suppressedDomain.findUnique({

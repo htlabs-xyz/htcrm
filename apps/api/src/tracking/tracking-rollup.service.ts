@@ -10,17 +10,17 @@ export class TrackingRollupService {
 		const rolled = await this.db.$executeRaw`
 			INSERT INTO "trackedPageDaily" ("day", "host", "path", "views", "visitors")
 			SELECT
-				strftime('%Y-%m-%dT00:00:00.000Z', "occurredAt") AS "day",
+				date_trunc('day', "occurredAt") AS "day",
 				"host",
 				"path",
-				count(*) AS "views",
-				count(DISTINCT "visitorId") AS "visitors"
+				count(*)::int AS "views",
+				count(DISTINCT "visitorId")::int AS "visitors"
 			FROM "trackedEvent"
 			WHERE "occurredAt" < ${before} AND "type" = 'page_view'
 			GROUP BY 1, 2, 3
 			ON CONFLICT ("day", "host", "path") DO UPDATE
-			SET "views" = MAX("trackedPageDaily"."views", EXCLUDED."views"),
-				"visitors" = MAX("trackedPageDaily"."visitors", EXCLUDED."visitors")
+			SET "views" = GREATEST("trackedPageDaily"."views", EXCLUDED."views"),
+				"visitors" = GREATEST("trackedPageDaily"."visitors", EXCLUDED."visitors");
 		`;
 
 		return rolled;

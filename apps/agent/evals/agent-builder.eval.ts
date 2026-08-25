@@ -9,12 +9,15 @@ export default defineEval({
 	tags: ["builder", "integration"],
 	timeoutMs: 180_000,
 	async test(t) {
-		const secret = process["env"].AGENT_BRIDGE_SECRET?.trim();
+		const secret = process.env.AGENT_BRIDGE_SECRET?.trim();
 		if (
+			!process.env.DATABASE_URL ||
 			!secret ||
-			(!process["env"].AI_GATEWAY_API_KEY && !process["env"].VERCEL_OIDC_TOKEN)
+			(!process.env.AI_GATEWAY_API_KEY && !process.env.VERCEL_OIDC_TOKEN)
 		) {
-			t.skip("Requires AGENT_BRIDGE_SECRET and an AI Gateway credential.");
+			t.skip(
+				"Requires DATABASE_URL, AGENT_BRIDGE_SECRET, and an AI Gateway credential.",
+			);
 			return;
 		}
 

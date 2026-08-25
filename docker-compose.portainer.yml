@@ -1,10 +1,5 @@
-x-d1-environment: &d1-environment
-  CLOUDFLARE_DATABASE_NAME: ${CLOUDFLARE_DATABASE_NAME:-htcrm}
-  CLOUDFLARE_ACCOUNT_ID: ${CLOUDFLARE_ACCOUNT_ID:?Set CLOUDFLARE_ACCOUNT_ID in Portainer}
-  CLOUDFLARE_D1_TOKEN: ${CLOUDFLARE_D1_TOKEN:?Set CLOUDFLARE_D1_TOKEN in Portainer}
-  CLOUDFLARE_DATABASE_ID: ${CLOUDFLARE_DATABASE_ID:?Set CLOUDFLARE_DATABASE_ID in Portainer}
-  D1_COORDINATOR_URL: ${D1_COORDINATOR_URL:?Set D1_COORDINATOR_URL in Portainer}
-  D1_COORDINATOR_SECRET: ${D1_COORDINATOR_SECRET:?Set D1_COORDINATOR_SECRET in Portainer}
+x-database-environment: &database-environment
+  DATABASE_URL: "postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in Portainer}@postgres:5432/${POSTGRES_DB:-crm}?schema=public"
 
 x-auth-environment: &auth-environment
   BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?Set BETTER_AUTH_SECRET in Portainer}
@@ -25,6 +20,26 @@ x-logging: &default-logging
     max-file: "3"
 
 services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-crm}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in Portainer}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+    logging: *default-logging
+    networks: [crm]
+
   migration:
     build:
       context: .
@@ -32,8 +47,11 @@ services:
       target: migration
     restart: "no"
     environment:
-      <<: *d1-environment
+      <<: *database-environment
       NODE_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
     logging: *default-logging
     networks: [crm]
 
@@ -44,7 +62,7 @@ services:
       target: api
     restart: unless-stopped
     environment:
-      <<: [*d1-environment, *auth-environment]
+      <<: [*database-environment, *auth-environment]
       NODE_ENV: production
       PORT: "3001"
       API_URL: ${API_PUBLIC_URL:?Set API_PUBLIC_URL in Portainer}
@@ -81,7 +99,7 @@ services:
       target: agent
     restart: unless-stopped
     environment:
-      <<: *d1-environment
+      <<: *database-environment
       NODE_ENV: production
       AGENT_PORT: "2000"
       PORT: "2000"
@@ -121,7 +139,7 @@ services:
         PUBLIC_API_URL: /api
     restart: unless-stopped
     environment:
-      <<: [*d1-environment, *auth-environment]
+      <<: [*database-environment, *auth-environment]
       NODE_ENV: production
       PORT: "3000"
       HOSTNAME: 0.0.0.0
@@ -182,3 +200,6 @@ services:
 networks:
   crm:
     driver: bridge
+
+volumes:
+  postgres-data:

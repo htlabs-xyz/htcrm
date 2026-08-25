@@ -179,6 +179,7 @@ export class AgentRunsService {
 					SELECT id, status, "currentVersionId"
 					FROM "agentDefinition"
 					WHERE id = ${input.id}
+					FOR UPDATE
 				`;
 
 			if (!agent || agent.status === "DELETED") {
@@ -275,6 +276,7 @@ export class AgentRunsService {
 					SELECT id, status, "currentVersionId"
 					FROM "agentDefinition"
 					WHERE id = ${input.id}
+					FOR UPDATE
 				`;
 			if (!agent || agent.status === "DELETED") {
 				throw new NotFoundException(`No agent with id ${input.id}.`);
@@ -345,6 +347,7 @@ export class AgentRunsService {
 				SELECT id, "agentId", "versionId", status, "initiatedById", "nextEventSequence"
 				FROM "agentRun"
 				WHERE id = ${input.runId}
+				FOR UPDATE
 			`;
 
 			if (!run || run.agentId !== input.id) {

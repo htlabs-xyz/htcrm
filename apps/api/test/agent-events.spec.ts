@@ -54,7 +54,7 @@ afterAll(async () => {
 	await db.agentTask.deleteMany({
 		where: {
 			kind: "slack-channel-join",
-			payload: { path: "$.channelId", equals: channelId },
+			payload: { path: ["channelId"], equals: channelId },
 		},
 	});
 	if (persistedDealId) {
@@ -169,7 +169,7 @@ describe("CRM agent events", () => {
 			await db.agentTask.findMany({
 				where: {
 					kind: "slack-channel-join",
-					payload: { path: "$.channelId", equals: channelId },
+					payload: { path: ["channelId"], equals: channelId },
 				},
 				select: { reason: true },
 			}),

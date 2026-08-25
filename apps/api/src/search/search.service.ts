@@ -26,7 +26,10 @@ export class SearchService {
 		const [companies, contacts, deals] = await Promise.all([
 			this.db.company.findMany({
 				where: {
-					OR: [{ name: { contains: term } }, { domain: { contains: term } }],
+					OR: [
+						{ name: { contains: term, mode: "insensitive" } },
+						{ domain: { contains: term, mode: "insensitive" } },
+					],
 				},
 				take: PER_KIND,
 				orderBy: { name: "asc" },
@@ -42,9 +45,9 @@ export class SearchService {
 			this.db.contact.findMany({
 				where: {
 					OR: [
-						{ firstName: { contains: term } },
-						{ lastName: { contains: term } },
-						{ email: { contains: term } },
+						{ firstName: { contains: term, mode: "insensitive" } },
+						{ lastName: { contains: term, mode: "insensitive" } },
+						{ email: { contains: term, mode: "insensitive" } },
 					],
 				},
 				take: PER_KIND,
@@ -59,7 +62,7 @@ export class SearchService {
 				},
 			}),
 			this.db.deal.findMany({
-				where: { name: { contains: term } },
+				where: { name: { contains: term, mode: "insensitive" } },
 				take: PER_KIND,
 				orderBy: [{ stage: "asc" }, { name: "asc" }],
 				select: {
