@@ -84,11 +84,11 @@ export class ConversationService {
 
 		const [contacts, users] = await Promise.all([
 			this.db.contact.findMany({
-				where: { email: { in: emails, mode: "insensitive" } },
+				where: { email: { in: emails } },
 				select: { email: true, imageUrl: true },
 			}),
 			this.db.user.findMany({
-				where: { email: { in: emails, mode: "insensitive" } },
+				where: { email: { in: emails } },
 				select: { email: true, image: true },
 			}),
 		]);

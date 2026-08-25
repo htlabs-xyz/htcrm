@@ -5,12 +5,12 @@ describe("parseEnv", () => {
 	it("reads plain and quoted values", () => {
 		expect(
 			parseEnv(`
-				DATABASE_URL="postgresql://postgres:postgres@localhost:5432/crm"
+				API_URL="http://localhost:3001"
 				PORT=3001
 				SINGLE='single quoted'
 			`),
 		).toEqual({
-			DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/crm",
+			API_URL: "http://localhost:3001",
 			PORT: "3001",
 			SINGLE: "single quoted",
 		});

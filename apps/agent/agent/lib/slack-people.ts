@@ -174,14 +174,11 @@ export async function persistSlackChannels(
 	];
 
 	return db.$transaction(async (tx) => {
-		const [account] = await tx.$queryRaw<Array<{ id: string }>>`
-			SELECT id
-			FROM "account"
-			WHERE "providerId" = 'slack' AND "accessToken" IS NOT NULL
-			ORDER BY "updatedAt" DESC
-			LIMIT 1
-			FOR UPDATE
-		`;
+		const account = await tx.account.findFirst({
+			where: { providerId: "slack", accessToken: { not: null } },
+			orderBy: { updatedAt: "desc" },
+			select: { id: true },
+		});
 		if (!account) return 0;
 
 		const ids = available.map((channel) => channel.id);
@@ -191,25 +188,22 @@ export async function persistSlackChannels(
 		});
 		if (ids.length === 0) return 0;
 
-		await tx.$executeRaw`
-			INSERT INTO "slackChannel" (id, name, "memberCount", "isPrivate", "isMember", available, "classifiedAt", "createdAt", "updatedAt")
-			SELECT id, name, "memberCount", "isPrivate", "isMember", true, NOW(), NOW(), NOW()
-			FROM UNNEST(
-				${ids}::text[],
-				${available.map((channel) => channel.name)}::text[],
-				${available.map((channel) => channel.num_members ?? null)}::int[],
-				${available.map((channel) => channel.is_private ?? false)}::boolean[],
-				${available.map((channel) => channel.is_member ?? false)}::boolean[]
-			) AS incoming(id, name, "memberCount", "isPrivate", "isMember")
-			ON CONFLICT (id) DO UPDATE SET
-				name = EXCLUDED.name,
-				"memberCount" = EXCLUDED."memberCount",
-				"isPrivate" = EXCLUDED."isPrivate",
-				"isMember" = EXCLUDED."isMember",
-				available = true,
-				"classifiedAt" = NOW(),
-				"updatedAt" = NOW()
-		`;
+		const classifiedAt = new Date();
+		for (const channel of available) {
+			const values = {
+				name: channel.name,
+				memberCount: channel.num_members ?? null,
+				isPrivate: channel.is_private ?? false,
+				isMember: channel.is_member ?? false,
+				available: true,
+				classifiedAt,
+			};
+			await tx.slackChannel.upsert({
+				where: { id: channel.id },
+				create: { id: channel.id, ...values },
+				update: values,
+			});
+		}
 
 		return ids.length;
 	});

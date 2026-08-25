@@ -158,9 +158,7 @@ export class ConversationsService {
 		await this.assertWorkspaceMember(userId);
 
 		const search = q.trim();
-		const contains = search
-			? { contains: search, mode: "insensitive" as const }
-			: undefined;
+		const contains = search ? { contains: search } : undefined;
 
 		const [companies, contacts, deals, slackAccount] = await Promise.all([
 			this.db.company.findMany({

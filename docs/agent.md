@@ -60,8 +60,8 @@ what the work is; the lane only says whether it needs a conversation.**
 `meeting` 200 · `identify` 100 · `sweep` 50 · `companyProfile` 40 · `recheck` 0. The
 top two are what a rep reads *before* deciding what to open.
 
-**`claimDue` sorts what it claims** — Postgres does not order `UPDATE … RETURNING` by
-its sub-select's `ORDER BY`.
+**`claimDue` sorts what it claims** after D1-safe conditional updates so dispatch
+priority remains deterministic.
 
 ### Dispatch on demand
 
@@ -76,7 +76,7 @@ it after writing any `AgentTask`.
   from drifting.
 - **`drainAll` collapses** via `collapsing()` (`lib/pool.ts`) — forty new contacts poke
   forty times, and `claimDue` hands each a disjoint batch. Per-process; cross-process
-  overlap is leases and `FOR UPDATE SKIP LOCKED`.
+  overlap is prevented by the D1 coordinator and conditional claims.
 - **An abandoned sweep is still in flight, and `dispatchHealth()` says so.** The
   timeout aborts the lanes, which stop between items, but the sweep only leaves
   `unsettledSweeps` when it truly settles. Until then health reports `running: true`
@@ -226,7 +226,7 @@ resolver, and `lib/context-dev.ts` memoises its client on the key string.
   billable lookup costs: a brand lookup is 10 Context credits, a person enrich is
   20. Both charge 2, because the budget rations calls per contact and a session
   with a budget of 4 must still be able to make two of them.
-- `lib/tasks.ts` — `claimDue` leases with `FOR UPDATE SKIP LOCKED`.
+- `lib/tasks.ts` — `claimDue` leases with coordinated conditional updates.
 - **`schedules/dispatch.ts` is the only schedule and decides nothing.** "Every N
   minutes, the oldest ten contacts" belongs in a `dueAt`.
 - `tools/schedule_recheck.ts` — its `reason` is shown to the rep.
@@ -298,7 +298,7 @@ egress:
 the backend factory** so it cannot be forgotten per session. Costs nothing —
 `web_fetch` runs in the app runtime, `web_search` at the provider.
 
-**Never give the sandbox `DATABASE_URL`.** CRM access is authored tools. A shell with
+**Never give the sandbox D1 credentials.** CRM access is authored tools. A shell with
 credentials and network is exfiltration-shaped; with neither it is a text processor.
 
 ## Team-agent builder and runner
@@ -690,9 +690,9 @@ byte-identical to the one it sent.** Parse for your own marker.
 
 ## Tests
 
-`bun run --filter=agent test`. The integration specs need `DATABASE_URL` and run
-against a real Postgres, which is the point — "never overwrite a human" is only
-true if the transaction says so.
+`bun run --filter=agent test`. The integration specs run against local D1. The shared
+coordinator serializes transaction-sensitive writes, and conditional updates prove
+that concurrent work does not overwrite a human edit.
 
 The `test/e2e` scripts are separate and you run them by hand. Three of them cost
 money or change something outside the database, so each one is off unless you

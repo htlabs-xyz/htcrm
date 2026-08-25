@@ -13,9 +13,9 @@ bun run test
 bun run build && bun run start:prod
 ```
 
-Three values are required and the process refuses to boot without them, naming
-the one it is missing: `DATABASE_URL`, `BETTER_AUTH_SECRET` and
-`ALLOWED_SIGN_IN`. `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are the fourth
+Local development requires the D1 database name, coordinator URL and secret,
+`BETTER_AUTH_SECRET`, and `ALLOWED_SIGN_IN`. Production also requires the Cloudflare
+account, token, and database ID. `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are the
 value almost every install wants — they are both the sign-in button and the
 Gmail and Calendar sync — but they are optional and set as a pair, because an
 install that signs in through its own identity provider on **Settings → SSO**
@@ -43,7 +43,7 @@ used for type checking only (`bun run check-types`).
 
 This process owns authentication. It mounts `/api/auth/*` and is the only one
 that writes session cookies; the Next.js app in `apps/app` reads those sessions
-straight from Postgres via `@crm/auth` and calls the routes above with
+from D1 via `@crm/auth` and calls the routes above with
 `credentials: "include"`.
 
 `AuthModule.forRoot({ auth })` mounts the Better Auth handler and registers a
@@ -80,7 +80,7 @@ with an explicit TTL, invalidate on change.
 ## Notes
 
 - Better Auth stores rate limits in the database (`rateLimit.storage`), so every
-  request to `/api/auth/*` needs a reachable Postgres. Moving this to
+  request to `/api/auth/*` needs reachable D1. Moving this to
   `secondaryStorage` backed by Redis would remove that dependency.
 - Environment variables are validated at boot by `src/config/env.validation.ts`.
   The process refuses to start on a bad config.

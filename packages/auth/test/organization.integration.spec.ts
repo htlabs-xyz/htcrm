@@ -47,7 +47,7 @@ const clear = async () => {
 
 	if (strangers > 0) {
 		throw new Error(
-			`${strangers} member row(s) this spec did not create are in the workspace, and it needs an empty one to test the owner backfill. It will not delete them: that is somebody's access. Point TEST_DATABASE_URL at a database of your own, or find the spec that leaked them.`,
+			`${strangers} member row(s) this spec did not create are in the workspace, and it needs an empty one to test the owner backfill. It will not delete them: that is somebody's access. Reset local D1, use an isolated D1 database, or find the spec that leaked them.`,
 		);
 	}
 };

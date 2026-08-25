@@ -39,31 +39,58 @@ export async function claimDue(
 	const list = "only" in kinds ? [...kinds.only] : [...kinds.except];
 	if ("only" in kinds && list.length === 0) return [];
 
-	const onlyMode = "only" in kinds;
+	const claimed = await db.$transaction(async (tx) => {
+		const due = await tx.agentTask.findMany({
+			where: {
+				finishedAt: null,
+				dueAt: { lte: now },
+				OR: [{ leasedUntil: null }, { leasedUntil: { lt: now } }],
+				attempts: { lt: MAX_ATTEMPTS },
+				kind: "only" in kinds ? { in: list } : { notIn: list },
+			},
+			orderBy: [{ priority: "desc" }, { dueAt: "asc" }],
+			take: limit,
+			select: { id: true, startedAt: true },
+		});
+		const rows: LeasedTask[] = [];
 
-	const claimed = await db.$queryRaw<LeasedTask[]>`
-		UPDATE "agentTask" AS t
-		SET "leasedUntil" = ${until},
-			"startedAt" = COALESCE(t."startedAt", ${now}),
-			"attempts" = t."attempts" + 1
-		FROM (
-			SELECT t2.id FROM "agentTask" AS t2
-			WHERE t2."finishedAt" IS NULL
-				AND t2."dueAt" <= ${now}
-				AND (t2."leasedUntil" IS NULL OR t2."leasedUntil" < ${now})
-				AND t2."attempts" < ${MAX_ATTEMPTS}
-				AND CASE
-					WHEN ${onlyMode}::boolean THEN t2.kind = ANY(${list}::text[])
-					ELSE t2.kind <> ALL(${list}::text[])
-				END
-			ORDER BY t2."priority" DESC, t2."dueAt" ASC
-			LIMIT ${limit}
-			FOR UPDATE SKIP LOCKED
-		) AS due
-		WHERE t.id = due.id
-		RETURNING t.id, t."contactId", t."companyId", t."dealId", t.kind, t.reason, t.payload,
-			t.budget, t.attempts, t.priority, t."dueAt";
-	`;
+		for (const candidate of due) {
+			const updated = await tx.agentTask.updateMany({
+				where: {
+					id: candidate.id,
+					finishedAt: null,
+					OR: [{ leasedUntil: null }, { leasedUntil: { lt: now } }],
+					attempts: { lt: MAX_ATTEMPTS },
+				},
+				data: {
+					leasedUntil: until,
+					startedAt: candidate.startedAt ?? now,
+					attempts: { increment: 1 },
+				},
+			});
+			if (updated.count === 0) continue;
+
+			const task = await tx.agentTask.findUnique({
+				where: { id: candidate.id },
+				select: {
+					id: true,
+					contactId: true,
+					companyId: true,
+					dealId: true,
+					kind: true,
+					reason: true,
+					payload: true,
+					budget: true,
+					attempts: true,
+					priority: true,
+					dueAt: true,
+				},
+			});
+			if (task) rows.push(task);
+		}
+
+		return rows;
+	});
 
 	return claimed.sort(
 		(a, b) => b.priority - a.priority || a.dueAt.getTime() - b.dueAt.getTime(),
@@ -75,22 +102,43 @@ export async function retireExhausted(
 ): Promise<TaskSubject[]> {
 	const now = new Date();
 
-	return db.$queryRaw<TaskSubject[]>`
-		UPDATE "agentTask" AS t
-		SET "finishedAt" = ${now},
-			"outcome" = ${RETIRED_OUTCOME}
-		WHERE t.id IN (
-			SELECT c.id
-			FROM "agentTask" AS c
-			WHERE c."finishedAt" IS NULL
-				AND c."attempts" >= ${MAX_ATTEMPTS}
-				AND (c."leasedUntil" IS NULL OR c."leasedUntil" < ${now})
-			ORDER BY c."dueAt" ASC
-			LIMIT ${limit}
-			FOR UPDATE SKIP LOCKED
-		)
-		RETURNING t.id, t."contactId", t."companyId", t."dealId", t.kind;
-	`;
+	return db.$transaction(async (tx) => {
+		const exhausted = await tx.agentTask.findMany({
+			where: {
+				finishedAt: null,
+				attempts: { gte: MAX_ATTEMPTS },
+				OR: [{ leasedUntil: null }, { leasedUntil: { lt: now } }],
+			},
+			orderBy: { dueAt: "asc" },
+			take: limit,
+			select: {
+				id: true,
+				contactId: true,
+				companyId: true,
+				dealId: true,
+				kind: true,
+			},
+		});
+
+		if (exhausted.length === 0) return [];
+
+		return tx.agentTask.updateManyAndReturn({
+			where: {
+				id: { in: exhausted.map((task) => task.id) },
+				finishedAt: null,
+				attempts: { gte: MAX_ATTEMPTS },
+				OR: [{ leasedUntil: null }, { leasedUntil: { lt: now } }],
+			},
+			data: { finishedAt: now, outcome: RETIRED_OUTCOME },
+			select: {
+				id: true,
+				contactId: true,
+				companyId: true,
+				dealId: true,
+				kind: true,
+			},
+		});
+	});
 }
 
 export async function completeTask(

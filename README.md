@@ -31,7 +31,7 @@
   <img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-blue.svg">
   <img alt="Built with eve" src="https://img.shields.io/badge/agent-eve-black.svg">
   <img alt="Built with Bun" src="https://img.shields.io/badge/runtime-Bun-black.svg">
-  <img alt="Postgres" src="https://img.shields.io/badge/database-Postgres-336791.svg">
+  <img alt="Cloudflare D1" src="https://img.shields.io/badge/database-Cloudflare%20D1-F38020.svg">
 </p>
 
 <p align="center">
@@ -88,9 +88,9 @@ stopped.
 | **1 schedule** | `dispatch.ts`, which decides nothing. It leases what is due and starts a session per row. |
 | **A sandbox** | `bash`, `grep`, `glob` and a `/workspace`, with **`deny-all` egress** |
 
-**It runs itself.** `lib/tasks.ts` is the work queue: `claimDue` leases rows with
-`FOR UPDATE SKIP LOCKED`, so two dispatchers take disjoint work and a run that dies
-frees its row when the lease expires. Anything that looks like "every N minutes, the
+**It runs itself.** `lib/tasks.ts` is the work queue: `claimDue` uses coordinated,
+conditional updates, so two dispatchers take disjoint work and a run that dies frees
+its row when the lease expires. Anything that looks like "every N minutes, the
 oldest ten contacts" belongs in a task's `dueAt`, not in a cron expression. When the
 agent wants another look at somebody it calls `schedule_recheck` and says why — and
 the reason is shown to the rep, because an agent that cannot say why it will be back
@@ -126,7 +126,7 @@ diff this month's profile against last month's, and grep a thread for a signatur
 block. `deny-all` egress costs nothing, because `web_fetch` runs in the app runtime
 and `web_search` at the model provider. What it removes is the only path by which a
 customer's email body could leave through a shell command. The other half of that rule
-is an absence: **the sandbox is never given `DATABASE_URL`.** A shell with credentials
+is an absence: **the sandbox is never given database credentials.** A shell with credentials
 and egress is exfiltration-shaped even in an internal tool; a shell with neither is a
 text processor.
 
@@ -152,7 +152,7 @@ A [Turborepo](https://turborepo.dev) monorepo on [Bun](https://bun.com), deploye
 | **Sandbox** | [Vercel Sandbox](https://vercel.com/docs/vercel-sandbox) in production, Docker or microsandbox locally |
 | **Front end** | [Next.js](https://nextjs.org) App Router · [shadcn/ui](https://ui.shadcn.com) · [nuqs](https://nuqs.dev) for URL state |
 | **API** | [NestJS](https://nestjs.com) with [nestjs-trpc](https://nestjs-trpc.io) — HTTP, auth, tRPC, mailbox sync |
-| **Data** | [Prisma](https://prisma.io) · Postgres ([Neon](https://neon.tech)) · optional Redis ([Upstash](https://upstash.com)) |
+| **Data** | [Prisma](https://prisma.io) · [Cloudflare D1](https://developers.cloudflare.com/d1/) · Durable Objects for write coordination · optional Redis ([Upstash](https://upstash.com)) |
 | **Auth** | [Better Auth](https://better-auth.com) — Google, Microsoft, or your own IdP; one allow-list |
 | **Files** | [Vercel Blob](https://vercel.com/docs/vercel-blob) — mirrors profile pictures so they survive the source going away |
 | **Tooling** | [Biome](https://biomejs.dev) · TypeScript everywhere |
@@ -169,7 +169,7 @@ reproduces the view.
 | `apps/agent` | The research agent — tools, skills, schedules, sandbox |
 | `apps/app` | Next.js front end · :3000 |
 | `apps/api` | NestJS API — HTTP, auth, tRPC, mailbox sync · :3001 |
-| `packages/db` | Prisma schema, migrations, shared Postgres client |
+| `packages/db` | Prisma, Wrangler migrations, shared D1 client, Durable Object coordinator · :8788 locally |
 | `packages/auth` | Better Auth config and the sign-in allow-list |
 | `packages/ui` | shadcn/ui components, the Tailwind theme |
 | `packages/env` | Finds and loads the root `.env` |
@@ -189,16 +189,14 @@ Written up where the work happens, not in a style guide:
 
 ## Quick start
 
-You need [Bun](https://bun.com) and Docker.
+You need [Bun](https://bun.com). Local D1 runs through Wrangler.
 
 ```sh
 git clone https://github.com/trycompai/crm.git && cd crm
 cp .env.example .env          # then fill in the values below
 bun install
 
-docker compose up -d          # Postgres on :5432
-
-bun run db:deploy             # apply migrations
+bun run db:migrate            # create local D1 and apply migrations
 bun run db:seed               # optional: a believable pipeline to look at
 bun run dev
 ```
@@ -218,6 +216,7 @@ Open `.env` and set these. Everything else in the file is optional and commented
 | Variable                                   | What to put in it                                                    |
 | ------------------------------------------ | -------------------------------------------------------------------- |
 | `BETTER_AUTH_SECRET`                       | `openssl rand -base64 32`                                             |
+| `D1_COORDINATOR_SECRET`                    | `openssl rand -base64 32`; use the same value for every local process. |
 | `ALLOWED_SIGN_IN`                          | Your email domain, e.g. `acme.com`. Or one address, e.g. `you@gmail.com`. |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`| A Google OAuth client — 2 minutes, below. Both or neither.             |
 | `MICROSOFT_CLIENT_ID` / `MICROSOFT_CLIENT_SECRET` | A Microsoft Entra app registration — below. Both or neither. |
@@ -226,8 +225,9 @@ Open `.env` and set these. Everything else in the file is optional and commented
 **Settings → SSO** once you are in. Setting both is fine and common: the sign-in page
 offers both buttons, and each rep's mail is read from whichever they signed in with.
 
-`DATABASE_URL` already matches the `docker compose` Postgres, so leave it alone unless
-you brought your own.
+`CLOUDFLARE_DATABASE_NAME` selects the local D1 database. The example coordinator URL
+targets the Worker started by `bun run dev`. Cloudflare account, token, and database
+ID are required only for production.
 
 <details>
 <summary><strong>Getting the Google OAuth client</strong></summary>
@@ -339,10 +339,11 @@ would have set. It refuses to run with `NODE_ENV=production`.
 
 ## Deploying
 
-Three deployments and a Postgres: the Next.js app, the NestJS API, and the agent.
-They are independent, and the only thing they must agree on is `DATABASE_URL` and
-`BETTER_AUTH_SECRET` — the API mints the session cookie and the app verifies it, so a
-mismatch is a redirect loop rather than an error.
+Four deployments: the Next.js app, the NestJS API, the agent, and the D1 coordinator
+Worker. The Node applications use the same D1 database ID, coordinator URL, and
+coordinator secret. The app and API must also agree on `BETTER_AUTH_SECRET` — the API
+mints the session cookie and the app verifies it, so a mismatch is a redirect loop
+rather than an error.
 
 Set `API_URL` and `APP_URL` to the real origins, and if the two are on different
 subdomains of one parent, set `AUTH_COOKIE_DOMAIN` to the parent so one cookie covers

@@ -179,17 +179,17 @@ export class ConversionService {
 		const value = new Prisma.Decimal(rate.rate).toString();
 
 		const filter = onlyMissing
-			? Prisma.sql`AND ("baseAmount" IS NULL OR "baseCurrency" IS DISTINCT FROM ${base})`
+			? Prisma.sql`AND ("baseAmount" IS NULL OR "baseCurrency" IS NOT ${base})`
 			: Prisma.empty;
 
 		return this.db.$executeRaw`
 			UPDATE "deal"
-			SET "baseAmount" = ROUND("amount" * ${value}::numeric, ${places}::int),
+			SET "baseAmount" = ROUND("amount" * CAST(${value} AS NUMERIC), ${places}),
 			    "baseCurrency" = ${base},
-			    "fxRate" = ${value}::numeric,
+			    "fxRate" = CAST(${value} AS NUMERIC),
 			    "fxRateAt" = ${rate.asOf}
 			WHERE "amount" IS NOT NULL
-			  AND upper(btrim("currency")) = ${code}
+			  AND upper(trim("currency")) = ${code}
 			  ${filter}
 		`;
 	}
@@ -201,7 +201,7 @@ export class ConversionService {
 			    "baseCurrency" = NULL,
 			    "fxRate" = NULL,
 			    "fxRateAt" = NULL
-			WHERE upper(btrim("currency")) = ${code}
+			WHERE upper(trim("currency")) = ${code}
 			  AND "baseAmount" IS NOT NULL
 		`;
 	}

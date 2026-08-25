@@ -1,2 +1,9 @@
 # Prisma Client is generated from prisma/schema.prisma — never commit it.
 src/generated/
+.wrangler/
+.d1-backups/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+wrangler.generated.jsonc
+dist/

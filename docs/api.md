@@ -51,7 +51,7 @@ here, what do we sell.
   `canConfigureSso`, `canManageCurrency` — enforced by the service *and* used to
   disable the UI control, so the button and the 403 cannot disagree.
   `WorkspaceService` adds one invariant: **the last owner cannot be demoted**, with
-  `FOR UPDATE` on the owner rows before counting.
+  the owner count and role update inside the D1 coordinator.
 - **Reads and writes go through tRPC**, not `authClient.organization.*`.
 - **Name and website are required at onboarding and cannot be skipped**, in the form
   *and* in `updateWorkspaceInput`, posting the same `workspace.update` as settings.
@@ -266,9 +266,13 @@ Below is `purge`'s contract — everything that used to be `delete`'s:
 - **Keyed lower case.** `normalizeEmail` (`crm/values.ts`) is the one canonicaliser,
   on `contacts.create`, `.update` and the suppression; conflict checks and `allowAgain`
   match case-insensitively.
-- **The address comes from the delete itself**
-  (`tx.contact.delete({ select: { email: true } })`), not a read before it — and the
-  404 is that statement's own `P2025` through `translate`.
+- **Read the address before deletion and suppress it first.** D1 does not roll back
+  Prisma's multi-statement adapter transaction atomically, so `purge` records the
+  contact and activity targets, upserts the suppression, clears dependent agent rows,
+  then deletes the contact. If a later statement reports an error after the contact is
+  already gone, the recovery path repairs the suppression and finishes the activity
+  recompute instead of returning a false failure. A contact missing at the initial
+  read still returns the ordinary 404.
 - **Adding them back lifts the suppression** via `allowAgain` **inside the write's
   transaction**. Never automatic.
 - **Purging a company does not suppress its domain** — its people survive with no

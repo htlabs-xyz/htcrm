@@ -662,7 +662,6 @@ export class AgentDefinitionsService {
 				SELECT id, status
 				FROM "agentDefinition"
 				WHERE id = ${id}
-				FOR UPDATE
 			`;
 
 			if (!current || current.status === "DELETED") {
@@ -683,7 +682,6 @@ export class AgentDefinitionsService {
 						OR (status = 'RUNNING' AND "sessionId" IS NULL)
 					)
 				ORDER BY id
-				FOR UPDATE
 			`;
 
 			for (const run of cancellableRuns) {
@@ -795,7 +793,6 @@ export class AgentDefinitionsService {
 			SELECT id, status, name, description, "currentVersionId"
 			FROM "agentDefinition"
 			WHERE id = ${id}
-			FOR UPDATE
 		`;
 
 		if (!agent || agent.status === "DELETED") {

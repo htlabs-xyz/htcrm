@@ -13,11 +13,12 @@ is a Google account.
 The **NestJS API** (`apps/api`, port 3001) mounts `/api/auth/*` via
 `@thallesp/nestjs-better-auth` and is the only process that writes session
 cookies. The **Next.js app** (`apps/app`, port 3000) imports this package on the
-server to *read* sessions straight from Postgres, and points its browser client
+server to *read* sessions from D1, and points its browser client
 at the API for sign-in and sign-out.
 
-Both processes therefore need the same `BETTER_AUTH_SECRET` and `DATABASE_URL`,
-or the cookie one writes will not verify in the other.
+Both processes therefore need the same `BETTER_AUTH_SECRET` and D1 configuration,
+or the cookie one writes will not verify in the other. Transaction-sensitive writes
+also use the shared D1 coordinator.
 
 ## Usage
 
@@ -85,7 +86,8 @@ editing `src/auth.ts`:
 
 ```bash
 bun run auth:generate   # rewrites packages/db/prisma/schema.prisma
-bun run db:migrate      # create the migration
+bun run db:migration:create -- <name>
+bun run db:migrate
 ```
 
 ## Notes

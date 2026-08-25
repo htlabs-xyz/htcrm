@@ -33,5 +33,16 @@
 		"just-bash": "^3.2.0",
 		"microsandbox": "^0.6.8",
 		"typescript": "^5.9.2"
+	},
+	"optionalDependencies": {
+		"@libsql/darwin-arm64": "0.5.29",
+		"@libsql/darwin-x64": "0.5.29",
+		"@libsql/linux-arm-gnueabihf": "0.5.29",
+		"@libsql/linux-arm-musleabihf": "0.5.29",
+		"@libsql/linux-arm64-gnu": "0.5.29",
+		"@libsql/linux-arm64-musl": "0.5.29",
+		"@libsql/linux-x64-gnu": "0.5.29",
+		"@libsql/linux-x64-musl": "0.5.29",
+		"@libsql/win32-x64-msvc": "0.5.29"
 	}
 }

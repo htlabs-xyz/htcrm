@@ -53,7 +53,7 @@ const probe = {
 const guarded = betterAuth({
 	baseURL: BASE_URL,
 	secret: "slack-connect-spec-secret",
-	database: prismaAdapter(db, { provider: "postgresql" }),
+	database: prismaAdapter(db, { provider: "sqlite" }),
 	emailAndPassword: { enabled: false },
 	hooks: { before: slackConnectGuard },
 	plugins: [probe],

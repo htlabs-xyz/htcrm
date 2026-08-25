@@ -439,7 +439,7 @@ export class CompaniesService {
 		try {
 			deleted = await this.db.$transaction(async (tx) => {
 				const [row] = await tx.$queryRaw<Array<{ archivedAt: Date | null }>>`
-					SELECT "archivedAt" FROM company WHERE id = ${id} FOR UPDATE
+					SELECT "archivedAt" FROM company WHERE id = ${id}
 				`;
 
 				if (!row) {
@@ -632,10 +632,7 @@ export class CompaniesService {
 		if (!term) return {};
 
 		return {
-			OR: [
-				{ name: { contains: term, mode: "insensitive" } },
-				{ domain: { contains: term, mode: "insensitive" } },
-			],
+			OR: [{ name: { contains: term } }, { domain: { contains: term } }],
 		};
 	}
 

@@ -73,16 +73,24 @@ export async function ensureWorkspaceMembership(
 					orderBy: [{ createdAt: "asc" }, { id: "asc" }],
 				});
 
-				await tx.member.createMany({
-					data: existing.map((user, index) => ({
-						id: crypto.randomUUID(),
-						organizationId: workspace.id,
-						userId: user.id,
-						role: index === 0 ? "owner" : "member",
-						createdAt: new Date(),
-					})),
-					skipDuplicates: true,
-				});
+				for (const [index, user] of existing.entries()) {
+					await tx.member.upsert({
+						where: {
+							organizationId_userId: {
+								organizationId: workspace.id,
+								userId: user.id,
+							},
+						},
+						create: {
+							id: crypto.randomUUID(),
+							organizationId: workspace.id,
+							userId: user.id,
+							role: index === 0 ? "owner" : "member",
+							createdAt: new Date(),
+						},
+						update: {},
+					});
+				}
 			}
 
 			await tx.member.upsert({

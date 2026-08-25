@@ -163,7 +163,7 @@ afterAll(async () => {
 		await db.agentRunEvent.deleteMany({ where: { run: { agentId } } });
 		await db.agentAction.deleteMany({ where: { agentId } });
 		await db.activity.deleteMany({
-			where: { meta: { path: ["agentId"], equals: agentId } },
+			where: { meta: { path: "$.agentId", equals: agentId } },
 		});
 		await db.agentAuditEvent.deleteMany({ where: { agentId } });
 		await db.agentRun.deleteMany({ where: { agentId } });
@@ -812,7 +812,7 @@ describe("durable custom-agent runtime", () => {
 		).toBe(1);
 		expect(
 			await db.activity.count({
-				where: { meta: { path: ["runId"], equals: run.id } },
+				where: { meta: { path: "$.runId", equals: run.id } },
 			}),
 		).toBe(1);
 

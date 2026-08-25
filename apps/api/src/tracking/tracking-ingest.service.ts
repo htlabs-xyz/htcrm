@@ -203,9 +203,15 @@ export class TrackingIngestService {
 
 		const key = dedupeKey({ host, path, email, at });
 
-		const created = await this.db.formSubmission.createMany({
-			data: [
-				{
+		const result = await this.db.$transaction(async (tx) => {
+			const existing = await tx.formSubmission.findUnique({
+				where: { dedupeKey: key },
+				select: { id: true, filedAt: true, skipReason: true },
+			});
+			if (existing) return { created: false, submission: existing };
+
+			const submission = await tx.formSubmission.create({
+				data: {
 					visitorId,
 					host,
 					path,
@@ -215,17 +221,13 @@ export class TrackingIngestService {
 					lastTouch: stored(lastTouch),
 					dedupeKey: key,
 				},
-			],
-			skipDuplicates: true,
+				select: { id: true, filedAt: true, skipReason: true },
+			});
+			return { created: true, submission };
 		});
 
-		const submission = await this.db.formSubmission.findUnique({
-			where: { dedupeKey: key },
-			select: { id: true, filedAt: true, skipReason: true },
-		});
-
-		if (!submission) return;
-		if (created.count === 0 && !unfiled(submission)) return;
+		const { submission } = result;
+		if (!result.created && !unfiled(submission)) return;
 
 		const outcome = await this.filing.file({
 			id: submission.id,

@@ -179,7 +179,7 @@ export class AgentTriggerService {
 				reason: `Add Comp AI to #${channelName}`,
 				priority: PRIORITY.slackJoin,
 				budget: 1,
-				subject: { path: ["channelId"], value: channelId },
+				subject: { path: "$.channelId", value: channelId },
 				payload: {
 					type: "slack.channel.join",
 					channelId,
@@ -452,7 +452,7 @@ export class AgentTriggerService {
 			priority: number;
 			budget: number;
 			payload?: Prisma.InputJsonValue;
-			subject?: { path: string[]; value: string };
+			subject?: { path: string; value: string };
 		},
 		required = false,
 		client?: Prisma.TransactionClient,

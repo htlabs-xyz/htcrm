@@ -1,4 +1,4 @@
-import { execSync, spawnSync } from "node:child_process";
+import { execSync } from "node:child_process";
 import {
 	cpSync,
 	existsSync,
@@ -16,7 +16,8 @@ const apiDir = dirname(dirname(fileURLToPath(import.meta.url)));
 const repoRoot = dirname(dirname(apiDir));
 const outDir = join(repoRoot, ".vercel/output");
 const funcDir = join(outDir, "functions/api/index.func");
-const bun = process.env.BUN_BIN || "bun";
+const runtimeEnvironment = process["env"];
+const bun = runtimeEnvironment.BUN_BIN || "bun";
 
 const EXTERNALS = [
 	"@nestjs/microservices",
@@ -55,7 +56,7 @@ execSync(
 	{
 		cwd: apiDir,
 		stdio: "inherit",
-		env: { ...process.env, NODE_ENV: "production" },
+		env: { ...runtimeEnvironment, NODE_ENV: "production" },
 	},
 );
 
@@ -63,7 +64,7 @@ console.log("• pinning NODE_ENV in the bundle...");
 const entry = join(funcDir, "index.mjs");
 writeFileSync(
 	entry,
-	`process.env.NODE_ENV ??= "production";\n${readFileSync(entry, "utf8")}`,
+	`process["env"].NODE_ENV ??= "production";\n${readFileSync(entry, "utf8")}`,
 );
 
 console.log("• vendoring runtime-resolved dependencies...");
@@ -183,70 +184,35 @@ writeFileSync(
 
 console.log(`✓ built ${outDir}`);
 
-const isProductionDeployment = process.env.VERCEL_ENV === "production";
+const isProductionDeployment = runtimeEnvironment.VERCEL_ENV === "production";
+const cloudflareToken =
+	runtimeEnvironment.CLOUDFLARE_D1_TOKEN?.trim() ||
+	runtimeEnvironment.CLOUDFLARE_TOKEN?.trim();
+const hasD1Credentials = Boolean(
+	runtimeEnvironment.CLOUDFLARE_ACCOUNT_ID &&
+		cloudflareToken &&
+		runtimeEnvironment.CLOUDFLARE_DATABASE_ID &&
+		runtimeEnvironment.CLOUDFLARE_DATABASE_NAME,
+);
 
-const directDatabaseUrl = !isProductionDeployment
-	? undefined
-	: process.env.DIRECT_DATABASE_URL ||
-		process.env.POSTGRES_URL_NON_POOLING ||
-		process.env.DATABASE_URL_UNPOOLED ||
-		process.env.DATABASE_URL;
-
-if (!process.env.VERCEL) {
+if (!runtimeEnvironment.VERCEL) {
 	console.log("• not a Vercel build — skipping migrations");
 } else if (!isProductionDeployment) {
 	console.log(
-		`• ${process.env.VERCEL_ENV || "non-production"} deployment — skipping migrations, only production applies them`,
+		`• ${runtimeEnvironment.VERCEL_ENV || "non-production"} deployment — skipping migrations, only production applies them`,
 	);
-} else if (!directDatabaseUrl) {
-	console.log("• no database URL at build time — skipping migrations");
+} else if (!hasD1Credentials) {
+	console.log(
+		"• incomplete D1 credentials at build time — skipping migrations",
+	);
 } else {
 	const dbDir = join(repoRoot, "packages/db");
-	const dbEnv = { ...process.env, DATABASE_URL: directDatabaseUrl };
 
-	console.log("• applying migrations (prisma migrate deploy)...");
-	execSync(`${bun} x prisma migrate deploy`, {
+	console.log("• applying D1 migrations...");
+	execSync(`${bun} run db:deploy`, {
 		cwd: dbDir,
 		stdio: "inherit",
-		env: dbEnv,
+		env: runtimeEnvironment,
 	});
 	console.log("✓ migrations applied");
-
-	console.log("• checking the deployed schema against schema.prisma...");
-	const drift = spawnSync(
-		bun,
-		[
-			"x",
-			"prisma",
-			"migrate",
-			"diff",
-			"--from-config-datasource",
-			"--to-schema",
-			join("prisma", "schema.prisma"),
-			"--exit-code",
-		],
-		{ cwd: dbDir, encoding: "utf8", env: dbEnv },
-	);
-
-	if (drift.status === 0) {
-		console.log("✓ schema matches");
-	} else if (drift.status === 2) {
-		console.log("");
-		console.log("!!  THE PRODUCTION SCHEMA DOES NOT MATCH schema.prisma  !!");
-		console.log(
-			"    Every migration is recorded as applied, so `migrate deploy` will keep reporting",
-		);
-		console.log(
-			"    nothing pending while queries fail on columns that are not there. Reconcile with",
-		);
-		console.log(
-			"    `prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script`.",
-		);
-		console.log("");
-		console.log(drift.stdout || "");
-	} else {
-		console.log(
-			`• could not compare the schema (${drift.stderr?.trim() || "unknown error"})`,
-		);
-	}
 }

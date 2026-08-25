@@ -198,7 +198,6 @@ export class WorkspaceService {
 				const owners = await tx.$queryRaw<{ id: string }[]>`
 					SELECT id FROM "member"
 					WHERE "organizationId" = ${WORKSPACE_ID} AND role = 'owner'
-					FOR UPDATE
 				`;
 
 				if (owners.length <= 1) {
@@ -244,10 +243,7 @@ export class WorkspaceService {
 
 		if (term) {
 			where.user = {
-				OR: [
-					{ name: { contains: term, mode: "insensitive" } },
-					{ email: { contains: term, mode: "insensitive" } },
-				],
+				OR: [{ name: { contains: term } }, { email: { contains: term } }],
 			};
 		}
 

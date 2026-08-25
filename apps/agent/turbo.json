@@ -18,7 +18,12 @@
 				"AGENT_BRIDGE_SECRET",
 				"AI_GATEWAY_API_KEY",
 				"BLOB_READ_WRITE_TOKEN",
-				"DATABASE_URL",
+				"CLOUDFLARE_ACCOUNT_ID",
+				"CLOUDFLARE_D1_TOKEN",
+				"CLOUDFLARE_TOKEN",
+				"CLOUDFLARE_DATABASE_ID",
+				"D1_COORDINATOR_URL",
+				"D1_COORDINATOR_SECRET",
 				"GITHUB_TOKEN",
 				"PERPLEXITY_API_KEY"
 			]
@@ -31,7 +36,12 @@
 				"AGENT_BRIDGE_SECRET",
 				"AI_GATEWAY_API_KEY",
 				"BLOB_READ_WRITE_TOKEN",
-				"DATABASE_URL",
+				"CLOUDFLARE_ACCOUNT_ID",
+				"CLOUDFLARE_D1_TOKEN",
+				"CLOUDFLARE_TOKEN",
+				"CLOUDFLARE_DATABASE_ID",
+				"D1_COORDINATOR_URL",
+				"D1_COORDINATOR_SECRET",
 				"GITHUB_TOKEN",
 				"PERPLEXITY_API_KEY"
 			]
@@ -45,7 +55,7 @@
 		 * spec deletes and recreates that row in `beforeEach`, and this app's
 		 * preamble spec reads it twice inside one assertion — once to compose the
 		 * expected "Who we are" block, once per preamble it checks against it.
-		 * Run in parallel against one Postgres, a delete landing between those
+		 * Run in parallel against one database, a delete landing between those
 		 * reads fails `ends each preamble with the same account of us`, and it
 		 * fails on whichever pull request happened to be unlucky.
 		 *
@@ -55,7 +65,13 @@
 		 */
 		"test": {
 			"dependsOn": ["topo", "^build", "@crm/auth#test"],
-			"passThroughEnv": ["DATABASE_URL"]
+			"passThroughEnv": [
+				"CLOUDFLARE_ACCOUNT_ID",
+				"CLOUDFLARE_D1_TOKEN",
+				"CLOUDFLARE_TOKEN",
+				"D1_COORDINATOR_URL",
+				"D1_COORDINATOR_SECRET"
+			]
 		}
 	}
 }

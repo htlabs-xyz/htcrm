@@ -258,7 +258,6 @@ export async function queueDueAgentRuns(now = new Date()): Promise<number> {
 				SELECT id, status
 				FROM "agentDefinition"
 				WHERE id = ${trigger.agentId}
-				FOR UPDATE
 			`;
 			if (agent?.status !== "LIVE") return false;
 
@@ -476,7 +475,6 @@ export async function dispatchAgentRun(runId: string, send: SendFn) {
 			SELECT id, status
 			FROM "agentDefinition"
 			WHERE id = ${run.agentId}
-			FOR UPDATE
 		`;
 		if (agent?.status !== "LIVE") return "unavailable" as const;
 
@@ -732,7 +730,6 @@ export async function lockBuilderConversation(
 		SELECT id, kind, "sessionId", "continuationToken"
 		FROM "agentConversation"
 		WHERE id = ${conversationId}
-		FOR UPDATE
 	`;
 	return conversation ?? null;
 }
@@ -783,7 +780,6 @@ async function recoverAgentRuns() {
 				SELECT status
 				FROM "agentDefinition"
 				WHERE id = ${row.agentId}
-				FOR UPDATE
 			`;
 			const run = await lockAgentRun(tx, row.id);
 			if (

@@ -1,7 +1,7 @@
 # `@crm/db`
 
-PostgreSQL access for the monorepo: the Prisma schema, migrations, and a shared
-`PrismaClient` instance.
+Cloudflare D1 access for the monorepo: the Prisma schema, Wrangler migrations,
+and one shared `PrismaClient` instance.
 
 ## Usage
 
@@ -19,54 +19,52 @@ import { Prisma, type User } from "@crm/db";
 
 ## Setup
 
+Copy the committed root environment template, generate the required secrets, then run:
+
 ```bash
-docker compose up -d       # Postgres matching the DATABASE_URL in .env.example
-cp .env.example .env       # at the repo root
-bun run db:generate        # generate Prisma Client
-bun run db:deploy          # apply the migrations
+bun run db:generate
+bun run db:migrate
+bun run db:seed
 ```
 
-`DATABASE_URL` comes from the **repo-root `.env`**, loaded by `@crm/env` — see
-[`docs/environment.md`](../../docs/environment.md). `src/client.ts` imports
-`@crm/env/load` before reading it, and `prisma.config.ts` does the same so the
-CLI works without any app running.
+Local commands use Wrangler state under `packages/db/.wrangler`. The client
+discovers its SQLite file automatically and uses `@prisma/adapter-libsql`.
+Production uses `@prisma/adapter-d1` with the Cloudflare account, token, and
+database ID.
 
 ## Scripts
 
-| Script        | Purpose                                                  |
-| ------------- | -------------------------------------------------------- |
-| `build`       | `prisma generate` — cached by Turborepo, runs via `^build` |
-| `dev:prepare` | Apply pending local migrations, reject drift, and generate Prisma Client |
-| `db:generate` | Regenerate Prisma Client                                 |
-| `db:migrate`  | Create and apply a migration (development)               |
-| `db:deploy`   | Apply pending migrations (CI / production)               |
-| `db:push`     | Push the schema without a migration (prototyping only)   |
-| `db:reset`    | Drop and recreate the database                           |
-| `db:seed`     | Run `prisma/seed.ts`                                     |
-| `db:studio`   | Open Prisma Studio                                       |
+| Script | Purpose |
+| --- | --- |
+| `build` | Generate Prisma Client and build the coordinator Worker |
+| `coordinator:build` | Build the coordinator Worker |
+| `coordinator:deploy` | Deploy the coordinator Worker |
+| `coordinator:secret` | Configure the coordinator secret |
+| `coordinator:test` | Run the coordinator Worker tests |
+| `dev:prepare` | Apply local D1 migrations and generate Prisma Client |
+| `db:generate` | Regenerate Prisma Client |
+| `db:migration:create -- <name>` | Create a Wrangler migration file |
+| `db:migrate` / `db:push` | Apply migrations to local D1 |
+| `db:deploy` | Explicitly apply migrations to remote D1 |
+| `db:reset` | Back up and rebuild local D1 |
+| `db:seed` | Migrate and seed local D1 |
+| `db:seed:remote` | Explicitly migrate and seed remote D1 |
+| `db:studio` | Open Prisma Studio against local D1 |
+| `db:test` | Rebuild the local test database and apply migrations |
 
-Each is also exposed at the repo root (`bun run db:migrate`) and routed through
-`turbo run`.
-
-The root `bun run dev` command runs `dev:prepare` before any service starts and
-reruns it when the schema or migrations change. Services that hold a Prisma
-client restart only after preparation finishes, so they cannot retain an older
-generated model map.
+Root scripts route these commands through Turborepo. Local reset backs up the
+Wrangler state under `packages/db/.d1-backups`.
 
 ## Notes
 
-- **Prisma 7 + driver adapter.** There is no query engine binary; the client
-  talks to PostgreSQL through `@prisma/adapter-pg`. See `src/client.ts`.
-- **Generated code is not committed.** `prisma generate` writes to
-  `src/generated/`, which is gitignored and declared as the `build` task's
-  output so Turborepo caches it.
-- **JIT package.** `exports` point at TypeScript sources; the consumer compiles
-  them. Turbopack transpiles workspace packages automatically, so a Next.js app
-  needs no `transpilePackages` entry. Non-bundler consumers need a TypeScript
-  runtime — the NestJS API runs on Bun for exactly this reason.
-- **Auth models are generated.** `User`, `Session`, `Account`, `Verification`
-  and `RateLimit` come from `@better-auth/cli`. Do not hand-edit them — change
-  the Better Auth config in `@crm/auth` and re-run `bun run auth:generate`.
-  The generator is additive: it adds models and fields a plugin needs but never
-  removes the ones a dropped plugin left behind, so removing a plugin means
-  deleting its models from the schema by hand.
+- The SQLite Prisma schema is the model authority. Wrangler SQL files are the
+  deployment authority because Prisma Migrate does not target D1.
+- `src/client.ts` selects the local or remote adapter from the configured
+  environment.
+- `src/transaction-lease.ts` serializes Prisma transaction callbacks.
+  `coordinator.ts` owns the authenticated Durable Object runtime.
+- The coordinator prevents concurrent writers. It does not add rollback to a
+  failed multi-statement D1 write.
+- Generated code lives in `src/generated` and is not committed.
+- Better Auth models come from `@better-auth/cli`. Change the auth config before
+  regenerating those models.

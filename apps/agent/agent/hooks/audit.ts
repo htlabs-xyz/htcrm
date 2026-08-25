@@ -40,19 +40,18 @@ export default defineHook({
 				const conversationId =
 					purpose === "builder" ? attribute(ctx, "conversationId") : null;
 				await db.$transaction(async (tx) => {
-					await tx.agentEvent.createMany({
-						data: [
-							{
-								id,
-								sessionId: ctx.session.id,
-								contactId: currentFocus().contactId,
-								conversationId,
-								type: event.type,
-								data,
-								emittedAt,
-							},
-						],
-						skipDuplicates: true,
+					await tx.agentEvent.upsert({
+						where: { id },
+						create: {
+							id,
+							sessionId: ctx.session.id,
+							contactId: currentFocus().contactId,
+							conversationId,
+							type: event.type,
+							data,
+							emittedAt,
+						},
+						update: {},
 					});
 
 					if (purpose === "builder") {

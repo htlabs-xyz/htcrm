@@ -148,7 +148,7 @@ export class ApiKeysService {
 		const term = q.trim();
 
 		if (term) {
-			where.name = { contains: term, mode: "insensitive" };
+			where.name = { contains: term };
 		}
 
 		return where;

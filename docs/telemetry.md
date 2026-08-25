@@ -88,7 +88,7 @@ whose event never arrived, which cannot be recovered.
 | `days_since_install` | Whole days since the first migration ran |
 | `is_vercel` | Whether `VERCEL` is set |
 | `node_version` | Major only, e.g. `22` |
-| `postgres_version` | Major only, e.g. `17` |
+| `postgres_version` | Always null on D1; retained for telemetry schema compatibility |
 | `members_bucket` | How many people work here, in bands |
 | `agent_model_id` | The model chosen on Settings → General, e.g. `zai/glm-5.2-fast` |
 | `agent_model_context_window` | Its context window in tokens |

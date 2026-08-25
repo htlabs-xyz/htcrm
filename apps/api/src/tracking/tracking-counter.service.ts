@@ -38,7 +38,7 @@ export class TrackingCounterService {
 		try {
 			await this.db.$executeRaw`
 				UPDATE "trackingCounter"
-				SET "value" = GREATEST("value" - ${amount}, 0)
+				SET "value" = MAX("value" - ${amount}, 0)
 				WHERE "key" = ${key};
 			`;
 		} catch (error) {

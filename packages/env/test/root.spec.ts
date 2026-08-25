@@ -60,7 +60,12 @@ describe("the committed .env.example", () => {
 
 	it("names every variable the required section promises", () => {
 		for (const key of [
-			"DATABASE_URL",
+			"CLOUDFLARE_DATABASE_NAME",
+			"CLOUDFLARE_ACCOUNT_ID",
+			"CLOUDFLARE_D1_TOKEN",
+			"CLOUDFLARE_DATABASE_ID",
+			"D1_COORDINATOR_URL",
+			"D1_COORDINATOR_SECRET",
 			"BETTER_AUTH_SECRET",
 			"ALLOWED_SIGN_IN",
 			"GOOGLE_CLIENT_ID",

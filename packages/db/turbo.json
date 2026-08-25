@@ -3,9 +3,22 @@
 	"extends": ["//"],
 	"tasks": {
 		"build": {
-			"inputs": ["$TURBO_DEFAULT$", "prisma/**"],
-			"outputs": ["src/generated/**"],
-			"passThroughEnv": ["DATABASE_URL"]
+			"inputs": ["$TURBO_DEFAULT$", "coordinator*", "prisma/**"],
+			"outputs": ["dist/coordinator/**", "src/generated/**"]
+		},
+		"coordinator:build": {
+			"inputs": ["coordinator*"],
+			"outputs": ["dist/coordinator/**"]
+		},
+		"coordinator:deploy": {
+			"cache": false
+		},
+		"coordinator:secret": {
+			"cache": false,
+			"interactive": true
+		},
+		"coordinator:test": {
+			"dependsOn": ["coordinator:build"]
 		},
 		"dev:prepare": {
 			"cache": false,
@@ -13,48 +26,73 @@
 				"prisma/schema.prisma",
 				"prisma/migrations/**",
 				"prisma.config.ts",
-				"scripts/prepare-dev.ts",
-				"scripts/require-local-db.ts"
+				"scripts/d1-command.ts",
+				"scripts/prepare-dev.ts"
 			],
 			"outputs": ["src/generated/**"],
-			"passThroughEnv": ["ALLOW_REMOTE_DB", "DATABASE_URL"]
+			"passThroughEnv": ["CLOUDFLARE_DATABASE_NAME"]
 		},
 		"db:generate": {
 			"inputs": ["$TURBO_DEFAULT$", "prisma/**"],
-			"outputs": ["src/generated/**"],
-			"passThroughEnv": ["DATABASE_URL"]
+			"outputs": ["src/generated/**"]
 		},
 		"db:deploy": {
 			"cache": false,
-			"passThroughEnv": ["DATABASE_URL"]
+			"passThroughEnv": [
+				"CLOUDFLARE_ACCOUNT_ID",
+				"CLOUDFLARE_D1_TOKEN",
+				"CLOUDFLARE_TOKEN",
+				"CLOUDFLARE_DATABASE_ID",
+				"CLOUDFLARE_DATABASE_NAME"
+			]
 		},
 		"db:migrate": {
 			"cache": false,
 			"interactive": true,
-			"passThroughEnv": ["DATABASE_URL"]
+			"passThroughEnv": ["CLOUDFLARE_DATABASE_NAME"]
+		},
+		"db:migration:create": {
+			"cache": false,
+			"interactive": true,
+			"passThroughEnv": ["CLOUDFLARE_DATABASE_NAME"]
 		},
 		"db:push": {
 			"cache": false,
 			"interactive": true,
-			"passThroughEnv": ["DATABASE_URL"]
+			"passThroughEnv": ["CLOUDFLARE_DATABASE_NAME"]
 		},
 		"db:reset": {
 			"cache": false,
 			"interactive": true,
-			"passThroughEnv": ["DATABASE_URL"]
+			"passThroughEnv": ["CLOUDFLARE_DATABASE_NAME"]
 		},
 		"db:seed": {
 			"cache": false,
-			"passThroughEnv": ["BLOB_READ_WRITE_TOKEN", "DATABASE_URL"]
+			"passThroughEnv": ["BLOB_READ_WRITE_TOKEN", "CLOUDFLARE_DATABASE_NAME"]
+		},
+		"db:seed:remote": {
+			"cache": false,
+			"passThroughEnv": [
+				"BLOB_READ_WRITE_TOKEN",
+				"CLOUDFLARE_ACCOUNT_ID",
+				"CLOUDFLARE_D1_TOKEN",
+				"CLOUDFLARE_TOKEN",
+				"CLOUDFLARE_DATABASE_ID",
+				"CLOUDFLARE_DATABASE_NAME"
+			]
 		},
 		"db:studio": {
 			"cache": false,
 			"persistent": true,
-			"passThroughEnv": ["DATABASE_URL"]
+			"passThroughEnv": ["CLOUDFLARE_DATABASE_NAME"]
 		},
 		"check-types": {
-			"dependsOn": ["$TURBO_EXTENDS$", "build"],
-			"passThroughEnv": ["DATABASE_URL"]
+			"dependsOn": ["$TURBO_EXTENDS$", "build"]
+		},
+		"dev": {
+			"cache": false,
+			"persistent": true,
+			"passThroughEnv": ["D1_COORDINATOR_SECRET"]
 		}
 	}
 }

@@ -119,9 +119,9 @@ describe("what a provider looks like once it is saved", () => {
 		expect(seen.providerWhere).toEqual({
 			organizationId: WORKSPACE_ID,
 			OR: [
-				{ providerId: { contains: "acme", mode: "insensitive" } },
-				{ domain: { contains: "acme", mode: "insensitive" } },
-				{ issuer: { contains: "acme", mode: "insensitive" } },
+				{ providerId: { contains: "acme" } },
+				{ domain: { contains: "acme" } },
+				{ issuer: { contains: "acme" } },
 			],
 		});
 	});

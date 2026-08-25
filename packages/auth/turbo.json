@@ -4,10 +4,26 @@
 	"tasks": {
 		"auth:generate": {
 			"cache": false,
-			"passThroughEnv": ["DATABASE_URL"]
+			"passThroughEnv": [
+				"CLOUDFLARE_ACCOUNT_ID",
+				"CLOUDFLARE_D1_TOKEN",
+				"CLOUDFLARE_TOKEN",
+				"CLOUDFLARE_DATABASE_ID",
+				"D1_LOCAL_DATABASE_PATH",
+				"D1_COORDINATOR_URL",
+				"D1_COORDINATOR_SECRET"
+			]
 		},
 		"check-types": {
-			"passThroughEnv": ["DATABASE_URL"]
+			"passThroughEnv": [
+				"CLOUDFLARE_ACCOUNT_ID",
+				"CLOUDFLARE_D1_TOKEN",
+				"CLOUDFLARE_TOKEN",
+				"CLOUDFLARE_DATABASE_ID",
+				"D1_LOCAL_DATABASE_PATH",
+				"D1_COORDINATOR_URL",
+				"D1_COORDINATOR_SECRET"
+			]
 		}
 	}
 }
