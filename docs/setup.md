@@ -137,13 +137,14 @@ DATABASE_URL="…" bunx prisma migrate diff \
 
 ## Portainer
 
-`docker-compose.portainer.yml` runs the web app, API, agent, remote D1
-migrations, and the API schedules. The D1 coordinator remains a Cloudflare Worker.
+`docker-compose.portainer.yml` runs PostgreSQL, the web app, API, agent,
+Prisma migrations, and the API schedules.
 
 Create a Portainer Git stack from this repository. Select
 `docker-compose.portainer.yml` as the Compose path. Add every required stack variable
-reported by Portainer before deployment. Keep all secret values in Portainer. Do not
-write them into the YAML file.
+reported by Portainer before deployment. `POSTGRES_PASSWORD` must be URL-safe because
+the stack uses it in `DATABASE_URL`; `openssl rand -hex 32` generates a suitable
+value. Keep all secret values in Portainer. Do not write them into the YAML file.
 
 Publish the app and API ports through your reverse proxy. The agent stays on the
 private Compose network, and the app proxies agent requests.
@@ -154,7 +155,8 @@ Set `APP_PUBLIC_URL` and `API_PUBLIC_URL` to the external HTTPS origins. Configu
 same origins in the OAuth providers. The API uses its in-memory cache because the
 stack runs one API instance.
 
-The one-shot `migration` service applies remote D1 migrations before the API starts.
+The one-shot `migration` service runs `prisma migrate deploy` after PostgreSQL is
+healthy and before the API starts. The `postgres-data` volume persists database data.
 The `scheduler` service replaces the schedules from `apps/api/vercel.json`. The built
 agent server also starts its dispatch schedule.
 
