@@ -1,7 +1,11 @@
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { loadRootEnv } from "@crm/env";
 import type { NextConfig } from "next";
 
 loadRootEnv();
+
+const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), "../..");
 
 const apiUrl =
 	process.env.API_URL ??
@@ -19,6 +23,8 @@ const allowedDevOrigins = (process.env.APP_URL ?? "")
 	});
 
 const nextConfig: NextConfig = {
+	output: "standalone",
+	outputFileTracingRoot: repositoryRoot,
 	allowedDevOrigins,
 
 	env: {

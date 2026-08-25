@@ -135,6 +135,31 @@ Preview builds do not mutate remote D1. Wrangler records applied files in
 `d1_migrations`; migration
 SQL remains the deployment authority because Prisma Migrate does not target D1.
 
+## Portainer
+
+`docker-compose.portainer.yml` runs the web app, API, agent, remote D1
+migrations, and the API schedules. The D1 coordinator remains a Cloudflare Worker.
+
+Create a Portainer Git stack from this repository. Select
+`docker-compose.portainer.yml` as the Compose path. Add every required stack variable
+reported by Portainer before deployment. Keep all secret values in Portainer. Do not
+write them into the YAML file.
+
+Publish the app and API ports through your reverse proxy. The agent stays on the
+private Compose network, and the app proxies agent requests.
+
+Set `APP_PUBLIC_URL` and `API_PUBLIC_URL` to the external HTTPS origins. Configure the
+same origins in the OAuth providers. The API uses its in-memory cache because the
+stack runs one API instance.
+
+The one-shot `migration` service applies remote D1 migrations before the API starts.
+The `scheduler` service replaces the schedules from `apps/api/vercel.json`. The built
+agent server also starts its dispatch schedule.
+
+Portainer on Docker Standalone builds the three application images from the Git
+repository. A Swarm stack needs prebuilt images because Swarm does not build images
+from `build` entries.
+
 ## Secrets hygiene
 
 Git ignores root environment files except the committed template. The template ships

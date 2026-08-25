@@ -1,0 +1,183 @@
+x-d1-environment: &d1-environment
+  CLOUDFLARE_DATABASE_NAME: ${CLOUDFLARE_DATABASE_NAME:-htcrm}
+  CLOUDFLARE_ACCOUNT_ID: ${CLOUDFLARE_ACCOUNT_ID:?Set CLOUDFLARE_ACCOUNT_ID in Portainer}
+  CLOUDFLARE_D1_TOKEN: ${CLOUDFLARE_D1_TOKEN:?Set CLOUDFLARE_D1_TOKEN in Portainer}
+  CLOUDFLARE_DATABASE_ID: ${CLOUDFLARE_DATABASE_ID:?Set CLOUDFLARE_DATABASE_ID in Portainer}
+  D1_COORDINATOR_URL: ${D1_COORDINATOR_URL:?Set D1_COORDINATOR_URL in Portainer}
+  D1_COORDINATOR_SECRET: ${D1_COORDINATOR_SECRET:?Set D1_COORDINATOR_SECRET in Portainer}
+
+x-auth-environment: &auth-environment
+  BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?Set BETTER_AUTH_SECRET in Portainer}
+  ALLOWED_SIGN_IN: ${ALLOWED_SIGN_IN:?Set ALLOWED_SIGN_IN in Portainer}
+  GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+  GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+  MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
+  MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-}
+  MICROSOFT_TENANT_ID: ${MICROSOFT_TENANT_ID:-common}
+  SLACK_CLIENT_ID: ${SLACK_CLIENT_ID:-}
+  SLACK_CLIENT_SECRET: ${SLACK_CLIENT_SECRET:-}
+  AUTH_COOKIE_DOMAIN: ${AUTH_COOKIE_DOMAIN:-}
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "3"
+
+services:
+  migration:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: migration
+    restart: "no"
+    environment:
+      <<: *d1-environment
+      NODE_ENV: production
+    logging: *default-logging
+    networks: [crm]
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: api
+    restart: unless-stopped
+    environment:
+      <<: [*d1-environment, *auth-environment]
+      NODE_ENV: production
+      PORT: "3001"
+      API_URL: ${API_PUBLIC_URL:?Set API_PUBLIC_URL in Portainer}
+      APP_URL: ${APP_PUBLIC_URL:?Set APP_PUBLIC_URL in Portainer}
+      AGENT_URL: http://agent:2000
+      AGENT_BRIDGE_SECRET: ${AGENT_BRIDGE_SECRET:?Set AGENT_BRIDGE_SECRET in Portainer}
+      CACHE_TTL_MS: ${CACHE_TTL_MS:-60000}
+      CRON_SECRET: ${CRON_SECRET:?Set CRON_SECRET in Portainer}
+      BLOB_READ_WRITE_TOKEN: ${BLOB_READ_WRITE_TOKEN:-}
+      CRM_TELEMETRY_DISABLED: ${CRM_TELEMETRY_DISABLED:-1}
+      PRISMA_LOG_QUERIES: ${PRISMA_LOG_QUERIES:-false}
+    ports:
+      - ${API_HOST_PORT:-3001}:3001
+    depends_on:
+      migration:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:3001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    logging: *default-logging
+    networks: [crm]
+
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: agent
+    restart: unless-stopped
+    environment:
+      <<: *d1-environment
+      NODE_ENV: production
+      AGENT_PORT: "2000"
+      PORT: "2000"
+      AGENT_BRIDGE_SECRET: ${AGENT_BRIDGE_SECRET:?Set AGENT_BRIDGE_SECRET in Portainer}
+      AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:?Set AI_GATEWAY_API_KEY in Portainer}
+      PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      BLOB_READ_WRITE_TOKEN: ${BLOB_READ_WRITE_TOKEN:-}
+      CRM_TELEMETRY_DISABLED: ${CRM_TELEMETRY_DISABLED:-1}
+    expose:
+      - "2000"
+    depends_on:
+      migration:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:2000/eve/v1/info').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))
+      interval: 15s
+      timeout: 5s
+      retries: 30
+      start_period: 45s
+    logging: *default-logging
+    networks: [crm]
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: app
+      args:
+        INTERNAL_API_URL: http://api:3001
+    restart: unless-stopped
+    environment:
+      <<: [*d1-environment, *auth-environment]
+      NODE_ENV: production
+      PORT: "3000"
+      HOSTNAME: 0.0.0.0
+      API_URL: http://api:3001
+      NEXT_PUBLIC_API_URL: http://api:3001
+      APP_URL: ${APP_PUBLIC_URL:?Set APP_PUBLIC_URL in Portainer}
+      AGENT_URL: http://agent:2000
+      AGENT_BRIDGE_SECRET: ${AGENT_BRIDGE_SECRET:?Set AGENT_BRIDGE_SECRET in Portainer}
+      IS_MARKETING: ${IS_MARKETING:-false}
+      CRM_TELEMETRY_DISABLED: ${CRM_TELEMETRY_DISABLED:-1}
+    ports:
+      - ${APP_HOST_PORT:-3000}:3000
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    logging: *default-logging
+    networks: [crm]
+
+  scheduler:
+    image: busybox:1.37
+    restart: unless-stopped
+    environment:
+      CRON_SECRET: ${CRON_SECRET:?Set CRON_SECRET in Portainer}
+    command:
+      - sh
+      - -ec
+      - |
+        mkdir -p /var/spool/cron/crontabs
+        cat > /usr/local/bin/crm-job <<'EOF'
+        #!/bin/sh
+        exec wget -qO- --header "authorization: Bearer $$CRON_SECRET" --post-data "" "http://api:3001$$1"
+        EOF
+        chmod 700 /usr/local/bin/crm-job
+        cat > /var/spool/cron/crontabs/root <<'EOF'
+        */5 * * * * /usr/local/bin/crm-job /internal/sync/mailboxes
+        0 6 * * * /usr/local/bin/crm-job /internal/sync/rates
+        0 7 * * * /usr/local/bin/crm-job /internal/telemetry/rollup
+        0 4 * * * /usr/local/bin/crm-job /internal/tracking/retention
+        0 5 * * * /usr/local/bin/crm-job /internal/archive/prune
+        EOF
+        exec crond -f -l 2
+    depends_on:
+      api:
+        condition: service_healthy
+    logging: *default-logging
+    networks: [crm]
+
+networks:
+  crm:
+    driver: bridge
