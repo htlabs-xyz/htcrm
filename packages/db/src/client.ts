@@ -3,7 +3,11 @@ import "@crm/env/load";
 import { PrismaD1 } from "@prisma/adapter-d1";
 import { type Prisma, PrismaClient } from "./generated/prisma/client";
 import { findLocalD1Database } from "./local-d1";
-import { executeCoordinatedTransaction } from "./transaction-lease";
+import {
+	executeCoordinatedTransaction,
+	type TransactionArguments,
+	type TransactionExecutor,
+} from "./transaction-lease";
 
 const runtimeEnvironment = process["env"];
 const runningTests = runtimeEnvironment.NODE_ENV === "test";
@@ -126,16 +130,16 @@ const createPrismaClient = () => {
 		sink({ level: "query", message: query, target, durationMs: duration });
 	});
 
-	const transaction = client.$transaction.bind(client) as (
-		...arguments_: unknown[]
-	) => Promise<unknown>;
+	const transaction = client.$transaction.bind(client) as TransactionExecutor<
+		typeof client
+	>;
 	return new Proxy(client, {
 		get(target, property, receiver) {
 			if (property !== "$transaction") {
 				return Reflect.get(target, property, receiver);
 			}
 
-			return (...arguments_: unknown[]) =>
+			return (...arguments_: TransactionArguments<typeof client>) =>
 				executeCoordinatedTransaction(
 					client,
 					transaction,

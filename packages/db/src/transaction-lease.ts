@@ -13,10 +13,30 @@ interface LeaseResult {
 	token?: string;
 }
 
+interface CoordinatorRequestBody {
+	key: string;
+	token?: string;
+	ttlMs?: number;
+}
+
+interface TransactionOptions {
+	isolationLevel?: string;
+	maxWait?: number;
+	timeout?: number;
+}
+
 const localQueues = new Map<string, Promise<void>>();
 
-type TransactionExecutor = (...arguments_: unknown[]) => Promise<unknown>;
 type TransactionCallback<TClient> = (client: TClient) => Promise<unknown>;
+type TransactionBatch = PromiseLike<unknown>[];
+
+export type TransactionArguments<TClient> =
+	| [operation: TransactionBatch, options?: TransactionOptions]
+	| [operation: TransactionCallback<TClient>, options?: TransactionOptions];
+
+export type TransactionExecutor<TClient> = (
+	...arguments_: TransactionArguments<TClient>
+) => Promise<unknown>;
 
 function delay(durationMs: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, durationMs));
@@ -60,7 +80,7 @@ function coordinatorConfiguration(): { secret: string; url: string } | null {
 async function coordinatorRequest(
 	configuration: { secret: string; url: string },
 	path: string,
-	body: Record<string, unknown>,
+	body: CoordinatorRequestBody,
 ): Promise<Response> {
 	return fetch(`${configuration.url}${path}`, {
 		method: "POST",
@@ -152,8 +172,8 @@ export async function withTransactionCoordination<T>(
 		if (renewing) return;
 		renewing = true;
 		renewal = renewRemoteLease(configuration, token)
-			.catch((error: unknown) => {
-				renewalError = error;
+			.catch((cause: unknown) => {
+				renewalError = cause;
 			})
 			.finally(() => {
 				renewing = false;
@@ -184,14 +204,14 @@ export async function withTransactionCoordination<T>(
 
 export function executeCoordinatedTransaction<TClient>(
 	client: TClient,
-	transaction: TransactionExecutor,
-	arguments_: unknown[],
+	transaction: TransactionExecutor<TClient>,
+	arguments_: TransactionArguments<TClient>,
 	supportsInteractiveTransactions: boolean,
 ): Promise<unknown> {
 	return withTransactionCoordination(() => {
 		const [operation] = arguments_;
-		if (typeof operation === "function" && !supportsInteractiveTransactions) {
-			return (operation as TransactionCallback<TClient>)(client);
+		if (!Array.isArray(operation) && !supportsInteractiveTransactions) {
+			return operation(client);
 		}
 
 		return transaction(...arguments_);

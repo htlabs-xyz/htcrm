@@ -6,7 +6,13 @@ const authorization = {
 	"content-type": "application/json",
 };
 
-function request(path: string, body: Record<string, unknown>) {
+interface LeaseRequestBody {
+	key: string;
+	token?: string;
+	ttlMs?: number;
+}
+
+function request(path: string, body: LeaseRequestBody) {
 	return SELF.fetch(`https://coordinator.test${path}`, {
 		method: "POST",
 		headers: authorization,

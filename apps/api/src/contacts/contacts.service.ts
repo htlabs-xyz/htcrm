@@ -70,6 +70,14 @@ const NO_COMPANY = "none";
 
 type FactColumns = Record<string, string | undefined>;
 
+interface ContactPurgeState {
+	pending: {
+		targets: StampTargets;
+		name: string;
+		suppressionEmail: string | null;
+	} | null;
+}
+
 const FACT_COLUMNS: FactColumns = {
 	title: "title",
 	seniority: "seniority",
@@ -393,13 +401,7 @@ export class ContactsService {
 			name: string;
 			suppressed: boolean;
 		} | null;
-		const purgeState: {
-			pending: {
-				targets: StampTargets;
-				name: string;
-				suppressionEmail: string | null;
-			} | null;
-		} = { pending: null };
+		const purgeState: ContactPurgeState = { pending: null };
 
 		try {
 			deleted = await this.db.$transaction(async (tx) => {

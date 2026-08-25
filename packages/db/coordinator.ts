@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 
 interface CoordinatorEnvironment {
-	D1_COORDINATOR_SECRET: string;
+	D1_COORDINATOR_SECRET?: string;
 	LEASES: DurableObjectNamespace<LeaseCoordinator>;
 }
 
@@ -16,6 +16,19 @@ interface AcquireResult {
 	retryAfterMs?: number;
 	token?: string;
 }
+
+type JsonPrimitive = boolean | number | string | null;
+type JsonValue = JsonPrimitive | JsonValue[] | JsonObject;
+
+interface JsonObject {
+	[key: string]: JsonValue;
+}
+
+type CoordinatorResponse =
+	| AcquireResult
+	| { error: string }
+	| { ok: boolean }
+	| { released: boolean };
 
 const minimumLeaseMs = 1_000;
 const maximumLeaseMs = 120_000;
@@ -100,15 +113,34 @@ function authorized(request: Request, secret: string): boolean {
 	return difference === 0;
 }
 
-async function body(request: Request): Promise<Record<string, unknown>> {
-	const value: unknown = await request.json();
-	if (!value || typeof value !== "object" || Array.isArray(value)) {
-		throw new Error("The request body must be a JSON object.");
-	}
-	return value as Record<string, unknown>;
+function isJsonObject(value: JsonValue): value is JsonObject {
+	return (
+		value !== null &&
+		!Array.isArray(value) &&
+		Object.prototype.toString.call(value) === "[object Object]"
+	);
 }
 
-function json(value: unknown, status = 200): Response {
+function isString(value: JsonValue | undefined): value is string {
+	return Object.prototype.toString.call(value) === "[object String]";
+}
+
+function isFiniteNumber(value: JsonValue | undefined): value is number {
+	return (
+		Object.prototype.toString.call(value) === "[object Number]" &&
+		Number.isFinite(value as number)
+	);
+}
+
+async function body(request: Request): Promise<JsonObject> {
+	const value = await request.json<JsonValue>();
+	if (!isJsonObject(value)) {
+		throw new Error("The request body must be a JSON object.");
+	}
+	return value;
+}
+
+function json(value: CoordinatorResponse, status = 200): Response {
 	return Response.json(value, { status });
 }
 
@@ -116,7 +148,7 @@ export default {
 	async fetch(request, environment): Promise<Response> {
 		const url = new URL(request.url);
 		const secret = environment.D1_COORDINATOR_SECRET;
-		const configured = typeof secret === "string" && secret.length >= 32;
+		const configured = isString(secret) && secret.length >= 32;
 		if (request.method === "GET" && url.pathname === "/health") {
 			return json({ ok: configured }, configured ? 200 : 503);
 		}
@@ -136,14 +168,14 @@ export default {
 		try {
 			const input = await body(request);
 			const key = input.key;
-			if (typeof key !== "string" || key.length === 0 || key.length > 256) {
+			if (!isString(key) || key.length === 0 || key.length > 256) {
 				return json({ error: "key must contain 1 to 256 characters." }, 400);
 			}
 
 			const coordinator = environment.LEASES.getByName(key);
 			if (url.pathname === "/leases/acquire") {
 				const ttlMs = input.ttlMs;
-				if (typeof ttlMs !== "number" || !Number.isFinite(ttlMs)) {
+				if (!isFiniteNumber(ttlMs)) {
 					return json({ error: "ttlMs must be a finite number." }, 400);
 				}
 				const result = await coordinator.acquire(ttlMs);
@@ -153,11 +185,7 @@ export default {
 			if (url.pathname === "/leases/renew") {
 				const ttlMs = input.ttlMs;
 				const token = input.token;
-				if (
-					typeof ttlMs !== "number" ||
-					!Number.isFinite(ttlMs) ||
-					typeof token !== "string"
-				) {
+				if (!isFiniteNumber(ttlMs) || !isString(token)) {
 					return json({ error: "token and ttlMs are required." }, 400);
 				}
 				const result = await coordinator.renew(token, ttlMs);
@@ -166,7 +194,7 @@ export default {
 
 			if (url.pathname === "/leases/release") {
 				const token = input.token;
-				if (typeof token !== "string") {
+				if (!isString(token)) {
 					return json({ error: "token is required." }, 400);
 				}
 				const released = await coordinator.release(token);

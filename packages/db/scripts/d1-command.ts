@@ -129,13 +129,16 @@ async function run(
 	const cloudflareToken =
 		runtimeEnvironment.CLOUDFLARE_D1_TOKEN?.trim() ||
 		runtimeEnvironment.CLOUDFLARE_TOKEN?.trim();
+	const childEnvironment = {
+		...runtimeEnvironment,
+		...extraEnvironment,
+	};
+	if (cloudflareToken) {
+		childEnvironment.CLOUDFLARE_API_TOKEN = cloudflareToken;
+	}
 	const child = Bun.spawn(command, {
 		cwd: packageDirectory,
-		env: {
-			...runtimeEnvironment,
-			...extraEnvironment,
-			...(cloudflareToken ? { CLOUDFLARE_API_TOKEN: cloudflareToken } : {}),
-		},
+		env: childEnvironment,
 		stdin: "inherit",
 		stdout: "inherit",
 		stderr: "inherit",
