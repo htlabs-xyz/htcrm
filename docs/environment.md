@@ -64,9 +64,12 @@ list fails closed.** Parsed on demand. `packages/auth/src/workspace.ts`.
 
 ## Where things are
 
-- **`API_URL`** (`:3001`) mints session cookies and serves `/api/auth/*`;
-  `next.config.ts` republishes it as `NEXT_PUBLIC_API_URL`, so one variable does both
-  sides. `BETTER_AUTH_URL` is a legacy fallback.
+- **`API_URL`** names the NestJS API that mints session cookies and serves
+  `/api/auth/*`. The API process uses its public origin for OAuth callbacks. The
+  Next.js server can use a private container origin for proxy requests.
+- **`NEXT_PUBLIC_API_URL`** is `/api` in container deployments. Browser requests stay
+  on the app origin, then the Next.js proxy forwards them to `API_URL`.
+  `BETTER_AUTH_URL` remains a legacy API fallback.
 - **Editing a file under `packages/` does not restart the API. Restart it by hand.**
   `bun --watch src/main.ts` refuses to watch outside its project directory and
   says so once at boot: `File ... is not in the project directory and will not be

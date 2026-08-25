@@ -147,6 +147,8 @@ write them into the YAML file.
 
 Publish the app and API ports through your reverse proxy. The agent stays on the
 private Compose network, and the app proxies agent requests.
+Browser API requests use `/api`. The Next.js server forwards them to the API service
+through the private Compose network.
 
 Set `APP_PUBLIC_URL` and `API_PUBLIC_URL` to the external HTTPS origins. Configure the
 same origins in the OAuth providers. The API uses its in-memory cache because the

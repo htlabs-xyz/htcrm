@@ -58,11 +58,10 @@ await signIn.email({
 await signIn.social({ provider: "google", callbackURL: "/" });
 ```
 
-`NEXT_PUBLIC_API_URL` decides which origin the client talks to. It must point at
-whichever process mounts the handler — the NestJS API. The Next.js app inlines
-it at build time from `API_URL`, in `next.config.ts`, so there is one variable
-rather than two spellings of one origin. Unset, the client uses the current
-origin.
+The browser client uses the current origin and the Next.js `/api` proxy. In a
+container deployment, `NEXT_PUBLIC_API_URL` stays `/api`, while the Next.js server
+uses `API_URL` to reach the NestJS API through the private network. The API process
+uses its public `API_URL` when it creates OAuth callback URLs.
 
 The client plugin list mirrors the server plugin list. Keep them in sync or the
 inferred client API will drift from the routes the server exposes.
