@@ -71,9 +71,10 @@ RUN bun run --filter=agent build
 FROM source AS app-builder
 
 ARG INTERNAL_API_URL=http://api:3001
+ARG PUBLIC_API_URL=/api
 
 ENV API_URL=${INTERNAL_API_URL}
-ENV NEXT_PUBLIC_API_URL=${INTERNAL_API_URL}
+ENV NEXT_PUBLIC_API_URL=${PUBLIC_API_URL}
 ENV BETTER_AUTH_SECRET=docker-build-only-placeholder-secret-000000000000
 ENV ALLOWED_SIGN_IN=build.invalid
 ENV D1_LOCAL_DATABASE_PATH=/tmp/docker-build.db

@@ -7,12 +7,10 @@ loadRootEnv();
 
 const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), "../..");
 
-const apiUrl =
-	process.env.API_URL ??
-	process.env.NEXT_PUBLIC_API_URL ??
-	"http://localhost:3001";
+const { env: runtimeEnvironment } = process;
+const publicApiUrl = runtimeEnvironment.NEXT_PUBLIC_API_URL ?? "/api";
 
-const allowedDevOrigins = (process.env.APP_URL ?? "")
+const allowedDevOrigins = (runtimeEnvironment.APP_URL ?? "")
 	.split(",")
 	.flatMap((origin) => {
 		try {
@@ -28,7 +26,7 @@ const nextConfig: NextConfig = {
 	allowedDevOrigins,
 
 	env: {
-		NEXT_PUBLIC_API_URL: apiUrl,
+		NEXT_PUBLIC_API_URL: publicApiUrl,
 	},
 
 	transpilePackages: ["@crm/auth", "@crm/db", "@crm/telemetry", "@crm/ui"],
