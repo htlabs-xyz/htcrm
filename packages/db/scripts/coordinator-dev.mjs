@@ -1,3 +1,5 @@
+import "@crm/env/load";
+
 import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

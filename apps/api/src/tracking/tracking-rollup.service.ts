@@ -20,7 +20,7 @@ export class TrackingRollupService {
 			GROUP BY 1, 2, 3
 			ON CONFLICT ("day", "host", "path") DO UPDATE
 			SET "views" = MAX("trackedPageDaily"."views", EXCLUDED."views"),
-				"visitors" = MAX("trackedPageDaily"."visitors", EXCLUDED."visitors");
+				"visitors" = MAX("trackedPageDaily"."visitors", EXCLUDED."visitors")
 		`;
 
 		return rolled;

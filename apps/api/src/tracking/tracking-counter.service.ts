@@ -20,7 +20,7 @@ export class TrackingCounterService {
 				ON CONFLICT ("key") DO UPDATE
 					SET "value" = "trackingCounter"."value" + ${amount}
 					WHERE "trackingCounter"."value" + ${amount} <= ${limit}
-				RETURNING "value";
+				RETURNING "value"
 			`;
 
 			return charged.length > 0;
@@ -39,7 +39,7 @@ export class TrackingCounterService {
 			await this.db.$executeRaw`
 				UPDATE "trackingCounter"
 				SET "value" = MAX("value" - ${amount}, 0)
-				WHERE "key" = ${key};
+				WHERE "key" = ${key}
 			`;
 		} catch (error) {
 			this.logger.error(

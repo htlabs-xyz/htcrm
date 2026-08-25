@@ -226,7 +226,7 @@ export class TrackingRetentionController {
 					SELECT "id" FROM "trackedEvent"
 					WHERE "occurredAt" < ${before}
 					LIMIT ${SWEEP_BATCH}
-				);
+				)
 			`;
 
 			removed += deleted;
@@ -244,7 +244,7 @@ export class TrackingRetentionController {
 				AND NOT EXISTS (
 					SELECT 1 FROM "trackedEvent"
 					WHERE "trackedEvent"."visitorId" = "trackedVisitor"."id"
-				);
+				)
 		`;
 
 		return orphaned;

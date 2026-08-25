@@ -3,7 +3,7 @@ import "@crm/env/load";
 import { PrismaD1 } from "@prisma/adapter-d1";
 import { type Prisma, PrismaClient } from "./generated/prisma/client";
 import { findLocalD1Database } from "./local-d1";
-import { withTransactionCoordination } from "./transaction-lease";
+import { executeCoordinatedTransaction } from "./transaction-lease";
 
 const runtimeEnvironment = process["env"];
 const runningTests = runtimeEnvironment.NODE_ENV === "test";
@@ -136,7 +136,12 @@ const createPrismaClient = () => {
 			}
 
 			return (...arguments_: unknown[]) =>
-				withTransactionCoordination(() => transaction(...arguments_));
+				executeCoordinatedTransaction(
+					client,
+					transaction,
+					arguments_,
+					localDatabase !== null,
+				);
 		},
 	}) as typeof client;
 };

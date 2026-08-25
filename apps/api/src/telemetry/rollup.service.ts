@@ -222,7 +222,7 @@ export class RollupService {
 				COUNT(*) AS count
 			FROM "agentEvent"
 			WHERE "type" = 'action.result' AND "emittedAt" >= ${since}
-			GROUP BY 1, 2;
+			GROUP BY 1, 2
 		`;
 
 		const calls: Record<string, number> = {};
@@ -252,7 +252,7 @@ export class RollupService {
 			FROM "agentEvent"
 			WHERE "emittedAt" >= ${since}
 				AND "type" IN ('session.started', 'session.waiting', 'session.failed', 'action.result')
-			GROUP BY 1;
+			GROUP BY 1
 		`;
 
 		const of = (type: string) =>

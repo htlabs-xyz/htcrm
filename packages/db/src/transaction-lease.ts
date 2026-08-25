@@ -15,6 +15,9 @@ interface LeaseResult {
 
 const localQueues = new Map<string, Promise<void>>();
 
+type TransactionExecutor = (...arguments_: unknown[]) => Promise<unknown>;
+type TransactionCallback<TClient> = (client: TClient) => Promise<unknown>;
+
 function delay(durationMs: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, durationMs));
 }
@@ -177,4 +180,20 @@ export async function withTransactionCoordination<T>(
 	if (releaseError) throw releaseError;
 	if (renewalError) throw renewalError;
 	return result as T;
+}
+
+export function executeCoordinatedTransaction<TClient>(
+	client: TClient,
+	transaction: TransactionExecutor,
+	arguments_: unknown[],
+	supportsInteractiveTransactions: boolean,
+): Promise<unknown> {
+	return withTransactionCoordination(() => {
+		const [operation] = arguments_;
+		if (typeof operation === "function" && !supportsInteractiveTransactions) {
+			return (operation as TransactionCallback<TClient>)(client);
+		}
+
+		return transaction(...arguments_);
+	});
 }
