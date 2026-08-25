@@ -3,10 +3,10 @@
 [Better Auth](https://better-auth.com) configuration for the monorepo, backed by
 `@crm/db`.
 
-Enabled: Google sign-in, account linking, cookie-cached sessions, and
-database-backed rate limiting. This is an internal, single-tenant app — there
-are no organizations, and email + password is switched off so the only way in
-is a Google account.
+Enabled: email/password registration and sign-in, Google and Microsoft sign-in,
+enterprise SSO, account linking, cookie-cached sessions, and database-backed
+rate limiting. This is an internal, single-workspace app; every new identity is
+still restricted by `ALLOWED_SIGN_IN`.
 
 ## Topology
 
@@ -44,8 +44,17 @@ export const POST = auth.handler;
 ### Client
 
 ```ts
-import { signIn, signOut, useSession } from "@crm/auth/client";
+import { signIn, signOut, signUp, useSession } from "@crm/auth/client";
 
+await signUp.email({
+	name: "Ada",
+	email: "ada@acme.com",
+	password: "correct-horse-battery-staple",
+});
+await signIn.email({
+	email: "ada@acme.com",
+	password: "correct-horse-battery-staple",
+});
 await signIn.social({ provider: "google", callbackURL: "/" });
 ```
 
@@ -75,9 +84,10 @@ Create an OAuth client in the Google Cloud console and add
 `<API_URL>/api/auth/callback/google` — `http://localhost:3001/api/auth/callback/google`
 in development — as an authorised redirect URI.
 
-`ALLOWED_SIGN_IN` decides who may sign in, and an empty value admits nobody. It
-is the whole authorisation model: there are no roles and no organizations, so
-`src/workspace.ts` is worth reading before you change anything here.
+`ALLOWED_SIGN_IN` decides who may register or sign in, and an empty value admits
+nobody. Email/password registration uses Better Auth's default password limits
+(8 to 128 characters). Email verification and password reset are not enabled
+because this project does not configure an email delivery service.
 
 ## Changing the schema
 

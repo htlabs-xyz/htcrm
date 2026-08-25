@@ -7,6 +7,7 @@ describe("Auth (e2e)", () => {
 	let app: INestApplication;
 
 	beforeAll(async () => {
+		process.env.ALLOWED_SIGN_IN = "example.com";
 		const { AppModule } = await import("../src/app.module");
 
 		const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -39,14 +40,28 @@ describe("Auth (e2e)", () => {
 		expect(response.status).not.toBe(404);
 	});
 
+	it("offers email registration without bypassing the sign-in allow-list", async () => {
+		const response = await request(app.getHttpServer())
+			.post("/api/auth/sign-up/email")
+			.send({
+				name: "Outside User",
+				email: "outside@not-allowed.test",
+				password: "valid-password",
+			})
+			.expect(403);
+
+		expect(response.body.message).toBe(
+			"This CRM is private. Sign in with your @example.com account.",
+		);
+	});
+
 	it("lets the sign-in page read what it may offer", async () => {
 		const response = await request(app.getHttpServer())
 			.get("/api/trpc/sso.signInOptions")
 			.expect(200);
 
 		const microsoftConfigured = Boolean(
-			process["env"].MICROSOFT_CLIENT_ID &&
-				process["env"].MICROSOFT_CLIENT_SECRET,
+			process.env.MICROSOFT_CLIENT_ID && process.env.MICROSOFT_CLIENT_SECRET,
 		);
 
 		expect(response.body.result.data).toEqual({
