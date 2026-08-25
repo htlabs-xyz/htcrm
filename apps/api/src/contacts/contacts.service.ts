@@ -70,14 +70,6 @@ const NO_COMPANY = "none";
 
 type FactColumns = Record<string, string | undefined>;
 
-interface ContactPurgeState {
-	pending: {
-		targets: StampTargets;
-		name: string;
-		suppressionEmail: string | null;
-	} | null;
-}
-
 const FACT_COLUMNS: FactColumns = {
 	title: "title",
 	seniority: "seniority",
@@ -274,7 +266,7 @@ export class ContactsService {
 		if (email) {
 			const existing = await this.db.contact.findFirst({
 				where: {
-					email: { equals: email },
+					email: { equals: email, mode: "insensitive" },
 					archivedAt: null,
 				},
 				select: { id: true, firstName: true, lastName: true },
@@ -401,12 +393,11 @@ export class ContactsService {
 			name: string;
 			suppressed: boolean;
 		} | null;
-		const purgeState: ContactPurgeState = { pending: null };
 
 		try {
 			deleted = await this.db.$transaction(async (tx) => {
 				const [row] = await tx.$queryRaw<Array<{ archivedAt: Date | null }>>`
-					SELECT "archivedAt" FROM contact WHERE id = ${id}
+					SELECT "archivedAt" FROM contact WHERE id = ${id} FOR UPDATE
 				`;
 
 				if (!row) {
@@ -421,65 +412,33 @@ export class ContactsService {
 				}
 
 				const targets = await this.stamp.targetsOf({ contactId: id }, tx);
-				const contact = await tx.contact.findUniqueOrThrow({
+
+				await tx.agentTask.deleteMany({ where: { contactId: id } });
+				await tx.agentEvent.deleteMany({ where: { contactId: id } });
+
+				const contact = await tx.contact.delete({
 					where: { id },
 					select: { firstName: true, lastName: true, email: true },
 				});
-				const suppressionEmail = normalizeEmail(contact.email ?? "");
-				const pendingDelete = {
-					targets,
-					name: nameOf(contact),
-					suppressionEmail,
-				};
-				purgeState.pending = pendingDelete;
 
-				if (suppressionEmail) {
+				const name = nameOf(contact);
+				const suppress = normalizeEmail(contact.email ?? "");
+
+				if (suppress) {
 					await tx.suppressedContact.upsert({
-						where: { email: suppressionEmail },
+						where: { email: suppress },
 						create: {
-							email: suppressionEmail,
-							reason: `Deleted from the CRM (${pendingDelete.name})`,
+							email: suppress,
+							reason: `Deleted from the CRM (${name})`,
 						},
 						update: {},
 					});
 				}
 
-				await tx.agentTask.deleteMany({ where: { contactId: id } });
-				await tx.agentEvent.deleteMany({ where: { contactId: id } });
-				await tx.contact.delete({ where: { id } });
-
-				return {
-					targets,
-					name: pendingDelete.name,
-					suppressed: suppressionEmail !== null,
-				};
+				return { targets, name, suppressed: suppress !== null };
 			});
 		} catch (error) {
-			const pendingDelete = purgeState.pending;
-			if (!pendingDelete) throw this.translate(error, id);
-
-			const remaining = await this.db.contact.findUnique({
-				where: { id },
-				select: { id: true },
-			});
-			if (remaining) throw this.translate(error, id);
-
-			if (pendingDelete.suppressionEmail) {
-				await this.db.suppressedContact.upsert({
-					where: { email: pendingDelete.suppressionEmail },
-					create: {
-						email: pendingDelete.suppressionEmail,
-						reason: `Deleted from the CRM (${pendingDelete.name})`,
-					},
-					update: {},
-				});
-			}
-
-			deleted = {
-				targets: pendingDelete.targets,
-				name: pendingDelete.name,
-				suppressed: pendingDelete.suppressionEmail !== null,
-			};
+			throw this.translate(error, id);
 		}
 
 		if (!deleted) return null;
@@ -644,7 +603,7 @@ export class ContactsService {
 	): Promise<void> {
 		if (!email) return;
 		await tx.suppressedContact.deleteMany({
-			where: { email: { equals: email } },
+			where: { email: { equals: email, mode: "insensitive" } },
 		});
 	}
 
@@ -826,10 +785,10 @@ export class ContactsService {
 
 		return {
 			OR: [
-				{ firstName: { contains: term } },
-				{ lastName: { contains: term } },
-				{ email: { contains: term } },
-				{ company: { name: { contains: term } } },
+				{ firstName: { contains: term, mode: "insensitive" } },
+				{ lastName: { contains: term, mode: "insensitive" } },
+				{ email: { contains: term, mode: "insensitive" } },
+				{ company: { name: { contains: term, mode: "insensitive" } } },
 			],
 		};
 	}

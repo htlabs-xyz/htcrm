@@ -193,17 +193,19 @@ async function searchContacts(
 	limit: number,
 ): Promise<ContactHit[]> {
 	const contains = words.flatMap((word) => [
-		{ firstName: { contains: word } },
-		{ lastName: { contains: word } },
-		{ email: { contains: word } },
+		{ firstName: { contains: word, mode: "insensitive" as const } },
+		{ lastName: { contains: word, mode: "insensitive" as const } },
+		{ email: { contains: word, mode: "insensitive" as const } },
 	]);
 
 	const rows = await db.contact.findMany({
 		where: {
 			OR: [
-				...(email ? [{ email: { equals: email } }] : []),
+				...(email
+					? [{ email: { equals: email, mode: "insensitive" as const } }]
+					: []),
 				...contains,
-				{ company: { name: { contains: term } } },
+				{ company: { name: { contains: term, mode: "insensitive" as const } } },
 			],
 		},
 		orderBy: [{ lastActivityAt: "desc" }, { createdAt: "asc" }],
@@ -249,10 +251,12 @@ async function searchCompanies(
 	const rows = await db.company.findMany({
 		where: {
 			OR: [
-				{ name: { contains: term } },
-				...(domain ? [{ domain: { contains: domain } }] : []),
+				{ name: { contains: term, mode: "insensitive" } },
+				...(domain
+					? [{ domain: { contains: domain, mode: "insensitive" as const } }]
+					: []),
 				...words.map((word) => ({
-					name: { contains: word },
+					name: { contains: word, mode: "insensitive" as const },
 				})),
 			],
 		},
@@ -293,11 +297,11 @@ async function searchDeals(
 	const rows = await db.deal.findMany({
 		where: {
 			OR: [
-				{ name: { contains: term } },
+				{ name: { contains: term, mode: "insensitive" } },
 				...words.map((word) => ({
-					name: { contains: word },
+					name: { contains: word, mode: "insensitive" as const },
 				})),
-				{ company: { name: { contains: term } } },
+				{ company: { name: { contains: term, mode: "insensitive" } } },
 			],
 		},
 		orderBy: [{ lastActivityAt: "desc" }, { createdAt: "desc" }],

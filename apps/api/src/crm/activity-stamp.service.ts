@@ -140,7 +140,7 @@ export class ActivityStampService {
 		const key = PrismaNamespace.raw(`"${column}"`);
 
 		return this.db.$executeRaw`
-			UPDATE ${record} AS r
+			UPDATE ${record} r
 			SET "lastActivityAt" = (
 				SELECT MAX(a."createdAt") FROM "activity" a WHERE a.${key} = r.id
 			)
@@ -150,37 +150,37 @@ export class ActivityStampService {
 	async recomputeAll(): Promise<void> {
 		await this.db.$transaction([
 			this.db.$executeRaw`
-				UPDATE "company" AS c
+				UPDATE "company" c
 				SET "lastActivityAt" = a.max
 				FROM (
 					SELECT "companyId" AS id, MAX("createdAt") AS max
 					FROM "activity" WHERE "companyId" IS NOT NULL GROUP BY "companyId"
 				) a
-				WHERE c.id = a.id AND c."lastActivityAt" IS NOT a.max`,
+				WHERE c.id = a.id AND c."lastActivityAt" IS DISTINCT FROM a.max`,
 			this.db.$executeRaw`
 				UPDATE "company" SET "lastActivityAt" = NULL
 				WHERE "lastActivityAt" IS NOT NULL
 				AND id NOT IN (SELECT "companyId" FROM "activity" WHERE "companyId" IS NOT NULL)`,
 			this.db.$executeRaw`
-				UPDATE "contact" AS c
+				UPDATE "contact" c
 				SET "lastActivityAt" = a.max
 				FROM (
 					SELECT "contactId" AS id, MAX("createdAt") AS max
 					FROM "activity" WHERE "contactId" IS NOT NULL GROUP BY "contactId"
 				) a
-				WHERE c.id = a.id AND c."lastActivityAt" IS NOT a.max`,
+				WHERE c.id = a.id AND c."lastActivityAt" IS DISTINCT FROM a.max`,
 			this.db.$executeRaw`
 				UPDATE "contact" SET "lastActivityAt" = NULL
 				WHERE "lastActivityAt" IS NOT NULL
 				AND id NOT IN (SELECT "contactId" FROM "activity" WHERE "contactId" IS NOT NULL)`,
 			this.db.$executeRaw`
-				UPDATE "deal" AS d
+				UPDATE "deal" d
 				SET "lastActivityAt" = a.max
 				FROM (
 					SELECT "dealId" AS id, MAX("createdAt") AS max
 					FROM "activity" WHERE "dealId" IS NOT NULL GROUP BY "dealId"
 				) a
-				WHERE d.id = a.id AND d."lastActivityAt" IS NOT a.max`,
+				WHERE d.id = a.id AND d."lastActivityAt" IS DISTINCT FROM a.max`,
 			this.db.$executeRaw`
 				UPDATE "deal" SET "lastActivityAt" = NULL
 				WHERE "lastActivityAt" IS NOT NULL

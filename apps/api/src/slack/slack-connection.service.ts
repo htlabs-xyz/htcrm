@@ -43,56 +43,39 @@ export class SlackConnectionService {
 
 	async status(userId: string): Promise<SlackStatus> {
 		const role = await this.access.assertMember(userId);
-		const [account, agentCandidates, matches, memberCount, grant] =
-			await Promise.all([
-				this.db.account.findFirst({
-					where: { providerId: "slack", accessToken: { not: null } },
-					orderBy: { updatedAt: "desc" },
-					select: { accountId: true, updatedAt: true, scope: true },
-				}),
-				this.db.agentDefinition.findMany({
-					where: {
-						status: { in: ["LIVE", "PAUSED"] },
-						deletedAt: null,
-						currentVersionId: { not: null },
+		const [account, agents, matches, memberCount, grant] = await Promise.all([
+			this.db.account.findFirst({
+				where: { providerId: "slack", accessToken: { not: null } },
+				orderBy: { updatedAt: "desc" },
+				select: { accountId: true, updatedAt: true, scope: true },
+			}),
+			this.db.agentDefinition.findMany({
+				where: {
+					status: { in: ["LIVE", "PAUSED"] },
+					deletedAt: null,
+					currentVersionId: { not: null },
+					currentVersion: {
+						manifest: {
+							path: ["dataScope", "resources"],
+							array_contains: [{ id: SLACK_WORKSPACE_RESOURCE_ID }],
+						},
 					},
-					orderBy: { updatedAt: "desc" },
-					select: {
-						id: true,
-						name: true,
-						description: true,
-						status: true,
-						currentVersion: { select: { manifest: true } },
-					},
-				}),
-				this.db.slackMemberMatch.findMany({
-					where: {
-						crmUser: { members: { some: { organizationId: WORKSPACE_ID } } },
-					},
-					select: { slackUserId: true, updatedAt: true },
-				}),
-				this.db.member.count({ where: { organizationId: WORKSPACE_ID } }),
-				this.db.slackWorkspaceGrant.findFirst({
-					select: { id: true, teamName: true },
-				}),
-			]);
-		const agents = agentCandidates
-			.filter((agent) => {
-				const manifest = schemas.agentManifest.agentManifest.safeParse(
-					agent.currentVersion?.manifest,
-				);
-				return (
-					manifest.success &&
-					manifest.data.dataScope.resources.some(
-						(resource) => resource.id === SLACK_WORKSPACE_RESOURCE_ID,
-					)
-				);
-			})
-			.slice(0, 30)
-			.map(({ currentVersion, ...agent }) => {
-				void currentVersion;
-				return agent;
-			});
+				},
+				orderBy: { updatedAt: "desc" },
+				take: 30,
+				select: { id: true, name: true, description: true, status: true },
+			}),
+			this.db.slackMemberMatch.findMany({
+				where: {
+					crmUser: { members: { some: { organizationId: WORKSPACE_ID } } },
+				},
+				select: { slackUserId: true, updatedAt: true },
+			}),
+			this.db.member.count({ where: { organizationId: WORKSPACE_ID } }),
+			this.db.slackWorkspaceGrant.findFirst({
+				select: { id: true, teamName: true },
+			}),
+		]);
 
 		const matched = matches.filter((match) => match.slackUserId).length;
 		const reviewed = matches.length;
@@ -205,7 +188,7 @@ export class SlackConnectionService {
 		const needle = input.query?.trim() ?? "";
 
 		const where: Prisma.SlackChannelWhereInput = { available: true };
-		if (needle) where.name = { contains: needle };
+		if (needle) where.name = { contains: needle, mode: "insensitive" };
 
 		const [rows, grant, sync] = await Promise.all([
 			this.db.slackChannel.findMany({

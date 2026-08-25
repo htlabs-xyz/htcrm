@@ -205,6 +205,7 @@ export class ConversationSharingService {
 			SELECT id
 			FROM "agentConversation"
 			WHERE id = ${conversationId}
+			FOR UPDATE
 		`;
 		if (rows.length === 0) return false;
 

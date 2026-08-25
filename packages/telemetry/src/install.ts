@@ -87,16 +87,12 @@ export type Milestone = (typeof MILESTONES)[number];
 
 export async function reachMilestone(step: Milestone): Promise<boolean> {
 	try {
-		return await db.$transaction(async (tx) => {
-			const existing = await tx.telemetryMilestone.findUnique({
-				where: { step },
-				select: { step: true },
-			});
-			if (existing) return false;
-
-			await tx.telemetryMilestone.create({ data: { step } });
-			return true;
+		const { count } = await db.telemetryMilestone.createMany({
+			data: [{ step }],
+			skipDuplicates: true,
 		});
+
+		return count === 1;
 	} catch {
 		return false;
 	}
@@ -176,16 +172,18 @@ export async function claimRollup(
 ): Promise<RollupClaim> {
 	try {
 		return await db.$transaction(async (tx): Promise<RollupClaim> => {
-			const current = await tx.install.findUnique({
-				where: { id: INSTALL_ID },
-				select: { lastRollupAt: true },
-			});
+			const locked = await tx.$queryRaw<{ lastRollupAt: Date | null }[]>`
+				SELECT "lastRollupAt"
+				FROM "install"
+				WHERE "id" = ${INSTALL_ID}
+				FOR UPDATE;
+			`;
 
-			if (!current) {
+			if (locked.length === 0) {
 				return { claimed: false, reason: "no install row" };
 			}
 
-			const previous = current.lastRollupAt;
+			const previous = locked[0]?.lastRollupAt ?? null;
 			if (!force && sameUtcDay(previous, at)) {
 				return { claimed: false, reason: "already sent today" };
 			}

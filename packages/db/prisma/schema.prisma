@@ -1,5 +1,5 @@
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 generator client {
@@ -805,7 +805,7 @@ model AgentRun {
   modelId      String?
   inputTokens  Int?
   outputTokens Int?
-  costUsd      Decimal?
+  costUsd      Decimal? @db.Decimal(12, 6)
 
   errorCode    String?
   errorMessage String?
@@ -925,15 +925,15 @@ model Deal {
 
   stage             DealStage @default(DEMO_BOOKED)
   stageChangedAt    DateTime  @default(now())
-  amount            Decimal?
+  amount            Decimal?  @db.Decimal(14, 2)
   currency          String    @default("USD")
   expectedCloseDate DateTime?
   closedAt          DateTime?
   closedReason      String?
 
-  baseAmount   Decimal?
+  baseAmount   Decimal?  @db.Decimal(24, 4)
   baseCurrency String?
-  fxRate       Decimal?
+  fxRate       Decimal?  @db.Decimal(20, 10)
   fxRateAt     DateTime?
 
   lastActivityAt DateTime?
@@ -965,7 +965,7 @@ model ExchangeRate {
   id            String     @id @default(cuid())
   baseCurrency  String
   quoteCurrency String
-  rate          Decimal
+  rate          Decimal    @db.Decimal(20, 10)
   asOf          DateTime
   source        RateSource
   provider      String?
@@ -1064,7 +1064,7 @@ model FieldValue {
   deal      Deal?    @relation(fields: [dealId], references: [id], onDelete: Cascade)
 
   text     String?
-  number   Decimal?
+  number   Decimal?     @db.Decimal(24, 4)
   date     DateTime?
   bool     Boolean?
   optionId String?

@@ -416,7 +416,7 @@ export class DealsService {
 		try {
 			deleted = await this.db.$transaction(async (tx) => {
 				const [row] = await tx.$queryRaw<Array<{ archivedAt: Date | null }>>`
-					SELECT "archivedAt" FROM deal WHERE id = ${id}
+					SELECT "archivedAt" FROM deal WHERE id = ${id} FOR UPDATE
 				`;
 
 				if (!row) {
@@ -480,6 +480,7 @@ export class DealsService {
 				SELECT id, stage, "companyId"
 				FROM deal
 				WHERE id = ${input.id}
+				FOR UPDATE
 			`;
 
 			if (!deal) {
@@ -740,8 +741,8 @@ export class DealsService {
 
 		return {
 			OR: [
-				{ name: { contains: term } },
-				{ company: { name: { contains: term } } },
+				{ name: { contains: term, mode: "insensitive" } },
+				{ company: { name: { contains: term, mode: "insensitive" } } },
 			],
 		};
 	}

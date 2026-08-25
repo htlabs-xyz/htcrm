@@ -236,9 +236,9 @@ export class SsoService {
 
 		if (term) {
 			where.OR = [
-				{ providerId: { contains: term } },
-				{ domain: { contains: term } },
-				{ issuer: { contains: term } },
+				{ providerId: { contains: term, mode: "insensitive" } },
+				{ domain: { contains: term, mode: "insensitive" } },
+				{ issuer: { contains: term, mode: "insensitive" } },
 			];
 		}
 

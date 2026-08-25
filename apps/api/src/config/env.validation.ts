@@ -27,36 +27,12 @@ export class EnvironmentVariables {
 	@Max(65535)
 	PORT = 3001;
 
-	@IsOptional()
 	@IsString()
-	CLOUDFLARE_ACCOUNT_ID?: string;
-
-	@IsOptional()
-	@IsString()
-	CLOUDFLARE_D1_TOKEN?: string;
-
-	@IsOptional()
-	@IsString()
-	CLOUDFLARE_TOKEN?: string;
-
-	@IsOptional()
-	@IsString()
-	CLOUDFLARE_DATABASE_ID?: string;
-
-	@IsOptional()
-	@IsString()
-	D1_LOCAL_DATABASE_PATH?: string;
-
-	@IsOptional()
-	@IsUrl({ require_tld: false, require_protocol: true })
-	D1_COORDINATOR_URL?: string;
-
-	@IsOptional()
-	@IsString()
-	@MinLength(32, {
-		message: "D1_COORDINATOR_SECRET must be at least 32 characters.",
+	@MinLength(1, {
+		message:
+			"DATABASE_URL is required. `docker compose up -d` starts one, or set it to any Postgres connection string.",
 	})
-	D1_COORDINATOR_SECRET?: string;
+	DATABASE_URL!: string;
 
 	@IsString()
 	@MinLength(32, {
@@ -172,54 +148,6 @@ export function validateEnv(config: RawEnvironment): EnvironmentVariables {
 
 		throw new Error(
 			`Invalid environment configuration:\n  - ${details}\n\nSee .env.example at the root of the repo.`,
-		);
-	}
-
-	const cloudflareToken =
-		validated.CLOUDFLARE_D1_TOKEN?.trim() || validated.CLOUDFLARE_TOKEN?.trim();
-	const d1Values = [
-		validated.CLOUDFLARE_ACCOUNT_ID,
-		cloudflareToken,
-		validated.CLOUDFLARE_DATABASE_ID,
-	];
-	const configuredD1Values = d1Values.filter(Boolean).length;
-	if (configuredD1Values > 0 && configuredD1Values < d1Values.length) {
-		throw new Error(
-			"CLOUDFLARE_ACCOUNT_ID, a Cloudflare token, and CLOUDFLARE_DATABASE_ID must be set together.",
-		);
-	}
-	if (
-		validated.NODE_ENV === NodeEnv.Production &&
-		configuredD1Values !== d1Values.length
-	) {
-		throw new Error("Cloudflare D1 credentials are required in production.");
-	}
-	if (
-		validated.NODE_ENV === NodeEnv.Production &&
-		validated.D1_LOCAL_DATABASE_PATH?.trim()
-	) {
-		throw new Error("D1_LOCAL_DATABASE_PATH cannot be used in production.");
-	}
-
-	const coordinatorValues = [
-		validated.D1_COORDINATOR_URL,
-		validated.D1_COORDINATOR_SECRET,
-	];
-	const configuredCoordinatorValues = coordinatorValues.filter(Boolean).length;
-	if (
-		configuredCoordinatorValues > 0 &&
-		configuredCoordinatorValues < coordinatorValues.length
-	) {
-		throw new Error(
-			"D1_COORDINATOR_URL and D1_COORDINATOR_SECRET must be set together.",
-		);
-	}
-	if (
-		validated.NODE_ENV === NodeEnv.Production &&
-		configuredCoordinatorValues !== coordinatorValues.length
-	) {
-		throw new Error(
-			"The D1 transaction coordinator is required in production.",
 		);
 	}
 

@@ -134,16 +134,18 @@ export class RollupService {
 	}
 
 	private async shape(): Promise<Properties> {
-		const [model, members, ssoProviders, contextKey] = await Promise.all([
-			readAgentModel(this.db).catch(() => null),
-			this.db.member.count({ where: { organizationId: WORKSPACE_ID } }),
-			this.db.ssoProvider.count(),
-			this.db.appSetting.findFirst({ select: { contextDevApiKey: true } }),
-		]);
+		const [model, members, ssoProviders, postgres, contextKey] =
+			await Promise.all([
+				readAgentModel(this.db).catch(() => null),
+				this.db.member.count({ where: { organizationId: WORKSPACE_ID } }),
+				this.db.ssoProvider.count(),
+				this.postgresMajor(),
+				this.db.appSetting.findFirst({ select: { contextDevApiKey: true } }),
+			]);
 
 		return {
 			node_version: process.versions.node.split(".")[0] ?? null,
-			postgres_version: null,
+			postgres_version: postgres,
 			members_bucket: bucket(members),
 
 			cap_perplexity: isSet("PERPLEXITY_API_KEY"),
@@ -162,6 +164,21 @@ export class RollupService {
 			agent_model_id: model?.id ?? null,
 			agent_model_context_window: model?.contextWindowTokens ?? null,
 		};
+	}
+
+	private async postgresMajor(): Promise<string | null> {
+		try {
+			const rows = await this.db.$queryRaw<{ version: string }[]>`
+				SELECT current_setting('server_version_num') AS version;
+			`;
+
+			const raw = Number(rows[0]?.version);
+			if (!Number.isFinite(raw)) return null;
+
+			return String(Math.floor(raw / 10_000));
+		} catch {
+			return null;
+		}
 	}
 
 	private async agent(
@@ -217,12 +234,12 @@ export class RollupService {
 			{ tool: string | null; failed: boolean; count: bigint }[]
 		>`
 			SELECT
-				json_extract("data", '$.result.toolName') AS tool,
-				COALESCE(json_extract("data", '$.status'), 'completed') <> 'completed' AS failed,
+				"data"->'result'->>'toolName' AS tool,
+				COALESCE("data"->>'status', 'completed') <> 'completed' AS failed,
 				COUNT(*) AS count
 			FROM "agentEvent"
 			WHERE "type" = 'action.result' AND "emittedAt" >= ${since}
-			GROUP BY 1, 2
+			GROUP BY 1, 2;
 		`;
 
 		const calls: Record<string, number> = {};
@@ -252,7 +269,7 @@ export class RollupService {
 			FROM "agentEvent"
 			WHERE "emittedAt" >= ${since}
 				AND "type" IN ('session.started', 'session.waiting', 'session.failed', 'action.result')
-			GROUP BY 1
+			GROUP BY 1;
 		`;
 
 		const of = (type: string) =>
@@ -393,9 +410,9 @@ export class RollupService {
 
 	private async evidenceKinds(): Promise<Record<string, number>> {
 		const rows = await this.db.$queryRaw<{ kind: string; count: bigint }[]>`
-			SELECT json_extract(item.value, '$.kind') AS kind, COUNT(*) AS count
-			FROM "contactFact", json_each("contactFact"."evidence") AS item
-			WHERE json_valid("evidence") AND json_type("evidence") = 'array'
+			SELECT item->>'kind' AS kind, COUNT(*) AS count
+			FROM "contactFact", jsonb_array_elements("evidence") AS item
+			WHERE jsonb_typeof("evidence") = 'array'
 			GROUP BY 1;
 		`;
 
@@ -408,38 +425,27 @@ export class RollupService {
 	}
 
 	private async decisionHours(): Promise<number | null> {
-		const rows = await this.db.contactFact.findMany({
-			where: { decidedAt: { not: null } },
-			select: { decidedAt: true, observedAt: true },
-		});
-		const hours = rows
-			.flatMap((row) =>
-				row.decidedAt
-					? [(row.decidedAt.getTime() - row.observedAt.getTime()) / HOUR_MS]
-					: [],
-			)
-			.sort((left, right) => left - right);
-		if (hours.length === 0) return null;
+		const rows = await this.db.$queryRaw<{ median: number | null }[]>`
+			SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (
+				ORDER BY EXTRACT(EPOCH FROM ("decidedAt" - "observedAt")) / 3600
+			) AS median
+			FROM "contactFact"
+			WHERE "decidedAt" IS NOT NULL;
+		`;
 
-		const middle = Math.floor(hours.length / 2);
-		const median =
-			hours.length % 2 === 1
-				? hours[middle]
-				: ((hours[middle - 1] ?? 0) + (hours[middle] ?? 0)) / 2;
-		return median === undefined ? null : round(median);
+		const median = rows[0]?.median;
+		return median === null || median === undefined ? null : round(median);
 	}
 
 	private async supersededWithin(days: number): Promise<number> {
-		const rows = await this.db.contactFact.findMany({
-			where: { supersededAt: { not: null } },
-			select: { observedAt: true, supersededAt: true },
-		});
-		const windowMs = days * 24 * HOUR_MS;
-		return rows.filter(
-			(row) =>
-				row.supersededAt &&
-				row.supersededAt.getTime() - row.observedAt.getTime() < windowMs,
-		).length;
+		const rows = await this.db.$queryRaw<{ count: bigint }[]>`
+			SELECT COUNT(*) AS count
+			FROM "contactFact"
+			WHERE "supersededAt" IS NOT NULL
+				AND "supersededAt" - "observedAt" < make_interval(days => ${days});
+		`;
+
+		return Number(rows[0]?.count ?? 0);
 	}
 
 	private async crm(since: Date): Promise<Properties> {

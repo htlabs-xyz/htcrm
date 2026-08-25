@@ -11,7 +11,7 @@ and nothing that is not read. `packages/env` walks up to the workspace root and 
 - **Real environment variables always win** — the loader never overwrites
   `process.env`, so Vercel/Docker/CI takes precedence.
 - **Never add a per-package `.env`.** Four once existed with duplicate
-  database and auth settings; when they drifted the API minted a cookie the
+  `DATABASE_URL`/`BETTER_AUTH_SECRET`; when they drifted the API minted a cookie the
   app could not verify and the browser bounced between `/sign-in` and `/` forever.
 - **The root marker is a `package.json` declaring `workspaces`** — stopping at the
   first `turbo.json` resolves the API's root to `apps/api`.
@@ -29,18 +29,8 @@ metadata. The root file's comment has the whole account.
 
 ## Required
 
-Local development requires `CLOUDFLARE_DATABASE_NAME`, `D1_COORDINATOR_URL`,
-`D1_COORDINATOR_SECRET`, `BETTER_AUTH_SECRET`, and `ALLOWED_SIGN_IN`. Production also
-requires `CLOUDFLARE_ACCOUNT_ID`,
-`CLOUDFLARE_D1_TOKEN`, `CLOUDFLARE_DATABASE_ID`, `D1_COORDINATOR_URL`, and
-`D1_COORDINATOR_SECRET`.
-
-`CLOUDFLARE_TOKEN` is accepted as an alias for `CLOUDFLARE_D1_TOKEN`. This supports
-existing credential files without copying their values into the repository.
-
-`D1_LOCAL_DATABASE_PATH` is an optional non-production override for tooling. Normal
-local commands discover Wrangler's SQLite file. Tests always use local D1 and reject
-remote selection; production rejects the local path override.
+`DATABASE_URL`, `BETTER_AUTH_SECRET`, `ALLOWED_SIGN_IN`. Everything else has a
+localhost default or is genuinely optional.
 
 **`GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET`** are the sign-in button *and* the
 Gmail/Calendar sync — optional, so an SSO-only install needn't create a Google project,
