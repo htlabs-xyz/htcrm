@@ -1,0 +1,222 @@
+x-crm-build: &crm-build
+  context: .
+  dockerfile: Dockerfile.portainer
+  args:
+    API_URL: ${API_URL:-http://localhost:13001}
+    APP_URL: ${APP_URL:-http://localhost:13000}
+
+x-crm-environment: &crm-environment
+  NODE_ENV: production
+  DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in Portainer}@postgres:5432/${POSTGRES_DB:-crm}?schema=public
+  DIRECT_DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in Portainer}@postgres:5432/${POSTGRES_DB:-crm}?schema=public
+  BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?Set a BETTER_AUTH_SECRET of at least 32 characters in Portainer}
+  ALLOWED_SIGN_IN: ${ALLOWED_SIGN_IN:?Set ALLOWED_SIGN_IN in Portainer}
+  API_URL: ${API_URL:-http://localhost:13001}
+  APP_URL: ${APP_URL:-http://localhost:13000}
+  NEXT_PUBLIC_API_URL: ${API_URL:-http://localhost:13001}
+  AUTH_COOKIE_DOMAIN: ${AUTH_COOKIE_DOMAIN:-}
+  GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+  GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+  MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
+  MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-}
+  MICROSOFT_TENANT_ID: ${MICROSOFT_TENANT_ID:-common}
+  SLACK_CLIENT_ID: ${SLACK_CLIENT_ID:-}
+  SLACK_CLIENT_SECRET: ${SLACK_CLIENT_SECRET:-}
+  REDIS_URL: redis://:${REDIS_PASSWORD:?Set REDIS_PASSWORD in Portainer}@redis:6379/0
+  CACHE_TTL_MS: ${CACHE_TTL_MS:-60000}
+  AGENT_URL: http://agent:2000
+  AGENT_BRIDGE_SECRET: ${AGENT_BRIDGE_SECRET:-}
+  PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY:-}
+  GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+  BLOB_READ_WRITE_TOKEN: ${BLOB_READ_WRITE_TOKEN:-}
+  AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:-}
+  VERCEL_OIDC_TOKEN: ${VERCEL_OIDC_TOKEN:-}
+  CRM_TELEMETRY_DISABLED: ${CRM_TELEMETRY_DISABLED:-1}
+  DO_NOT_TRACK: ${DO_NOT_TRACK:-1}
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-crm}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in Portainer}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'PGPASSWORD="$${POSTGRES_PASSWORD}" pg_isready -h 127.0.0.1 -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    networks: [crm]
+
+  redis:
+    image: redis:8.0.3-alpine
+    restart: unless-stopped
+    command:
+      [
+        "redis-server",
+        "--appendonly",
+        "yes",
+        "--appendfsync",
+        "everysec",
+        "--requirepass",
+        "${REDIS_PASSWORD:?Set REDIS_PASSWORD in Portainer}",
+      ]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in Portainer}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "redis-cli",
+          "-a",
+          "${REDIS_PASSWORD:?Set REDIS_PASSWORD in Portainer}",
+          "--no-auth-warning",
+          "ping",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    networks: [crm]
+
+  migration:
+    image: ${MIGRATION_IMAGE:-crm-migration:latest}
+    build:
+      <<: *crm-build
+      target: migration
+    restart: "no"
+    command:
+      - sh
+      - -ec
+      - |
+        validate_uri_component() {
+          case "$$1" in
+            ""|*[!A-Za-z0-9._~-]*) return 1 ;;
+            *) return 0 ;;
+          esac
+        }
+        if ! validate_uri_component "$$POSTGRES_USER" ||
+           ! validate_uri_component "$$POSTGRES_PASSWORD" ||
+           ! validate_uri_component "$$POSTGRES_DB"; then
+          echo "POSTGRES_DB, POSTGRES_USER, and POSTGRES_PASSWORD must use only URI-unreserved characters: A-Z a-z 0-9 . _ ~ -" >&2
+          exit 64
+        fi
+        exec bun run --filter=@crm/db db:deploy
+    environment:
+      <<: *crm-environment
+      POSTGRES_DB: ${POSTGRES_DB:-crm}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in Portainer}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [crm]
+
+  api:
+    image: ${API_IMAGE:-crm-api:latest}
+    build:
+      <<: *crm-build
+      target: api
+    restart: unless-stopped
+    environment:
+      <<: *crm-environment
+      PORT: "3001"
+    ports:
+      - "${API_HOST_PORT:-13001}:3001"
+    depends_on:
+      migration:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bun",
+          "-e",
+          "fetch('http://127.0.0.1:3001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    networks: [crm]
+
+  agent:
+    image: ${AGENT_IMAGE:-crm-agent:latest}
+    build:
+      <<: *crm-build
+      target: agent
+    restart: unless-stopped
+    environment:
+      <<: *crm-environment
+      AGENT_PORT: "2000"
+    ports:
+      - "${AGENT_HOST_PORT:-12000}:2000"
+    depends_on:
+      migration:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bun",
+          "-e",
+          "fetch('http://127.0.0.1:2000/').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    networks: [crm]
+
+  app:
+    image: ${APP_IMAGE:-crm-app:latest}
+    build:
+      <<: *crm-build
+      target: app
+    restart: unless-stopped
+    environment:
+      <<: *crm-environment
+      PORT: "3000"
+      HOSTNAME: 0.0.0.0
+      IS_MARKETING: ${IS_MARKETING:-false}
+    ports:
+      - "${APP_HOST_PORT:-13000}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+      agent:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bun",
+          "-e",
+          "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    networks: [crm]
+
+networks:
+  crm:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    name: ${POSTGRES_VOLUME_NAME:-crm-postgres-data}
+  redis_data:
+    name: ${REDIS_VOLUME_NAME:-crm-redis-data}
