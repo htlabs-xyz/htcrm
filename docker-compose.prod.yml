@@ -1,0 +1,149 @@
+name: htcrm
+
+x-service: &service
+  restart: unless-stopped
+  init: true
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+x-app-environment: &app-environment
+  NODE_ENV: production
+  DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?Set a URL-safe POSTGRES_PASSWORD}@postgres:5432/crm?schema=public
+  BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?Set BETTER_AUTH_SECRET}
+  ALLOWED_SIGN_IN: ${ALLOWED_SIGN_IN:?Set ALLOWED_SIGN_IN}
+  APP_URL: ${APP_URL:-http://localhost:3000}
+  API_URL: ${API_URL:-${APP_URL:-http://localhost:3000}}
+  AGENT_URL: http://agent:2000
+  AGENT_BRIDGE_SECRET: ${AGENT_BRIDGE_SECRET:?Set AGENT_BRIDGE_SECRET}
+  CRON_SECRET: ${CRON_SECRET:?Set CRON_SECRET}
+  GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+  GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+  MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
+  MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-}
+  MICROSOFT_TENANT_ID: ${MICROSOFT_TENANT_ID:-common}
+  SLACK_CLIENT_ID: ${SLACK_CLIENT_ID:-}
+  SLACK_CLIENT_SECRET: ${SLACK_CLIENT_SECRET:-}
+  AUTH_COOKIE_DOMAIN: ${AUTH_COOKIE_DOMAIN:-}
+  CRM_TELEMETRY_DISABLED: ${CRM_TELEMETRY_DISABLED:-}
+  DO_NOT_TRACK: ${DO_NOT_TRACK:-}
+
+services:
+  postgres:
+    <<: *service
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set a URL-safe POSTGRES_PASSWORD}
+      POSTGRES_DB: crm
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U postgres -d crm"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: migrate
+    environment:
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?Set a URL-safe POSTGRES_PASSWORD}@postgres:5432/crm?schema=public
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    <<: *service
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: api
+    environment:
+      <<: *app-environment
+      PORT: "3001"
+      REDIS_URL: ${REDIS_URL:-}
+      CACHE_TTL_MS: ${CACHE_TTL_MS:-60000}
+      BLOB_READ_WRITE_TOKEN: ${BLOB_READ_WRITE_TOKEN:-}
+      PRISMA_LOG_QUERIES: ${PRISMA_LOG_QUERIES:-false}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD, bun, -e, "const r = await fetch('http://127.0.0.1:3001/health'); process.exit(r.ok ? 0 : 1)"]
+      interval: 15s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+
+  agent:
+    <<: *service
+    build:
+      context: .
+      dockerfile: apps/agent/Dockerfile
+      target: agent
+    environment:
+      <<: *app-environment
+      PORT: "2000"
+      AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:-}
+      PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      BLOB_READ_WRITE_TOKEN: ${BLOB_READ_WRITE_TOKEN:-}
+    volumes:
+      - agent-workflows:/app/apps/agent/.eve/.workflow-data
+      - agent-sandboxes:/app/apps/agent/.eve/sandbox-cache
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD, bun, -e, "const r = await fetch('http://127.0.0.1:2000/eve/v1/health'); process.exit(r.ok ? 0 : 1)"]
+      interval: 15s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+    stop_grace_period: 60s
+
+  web:
+    <<: *service
+    build:
+      context: .
+      dockerfile: apps/app/Dockerfile
+      target: web
+    environment:
+      <<: *app-environment
+      IS_MARKETING: ${IS_MARKETING:-false}
+    ports:
+      - "${HTTP_BIND:-0.0.0.0}:${HTTP_PORT:-3000}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+      agent:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, bun, -e, "const r = await fetch('http://127.0.0.1:3000/sign-in'); process.exit(r.ok ? 0 : 1)"]
+      interval: 15s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+
+  scheduler:
+    <<: *service
+    build:
+      context: .
+      dockerfile: docker/scheduler.Dockerfile
+      target: scheduler
+    environment:
+      CRON_SECRET: ${CRON_SECRET:?Set CRON_SECRET}
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+  agent-workflows:
+  agent-sandboxes:

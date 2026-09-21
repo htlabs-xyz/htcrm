@@ -339,6 +339,19 @@ would have set. It refuses to run with `NODE_ENV=production`.
 
 ## Deploying
 
+For Docker, configure the root environment file, then run:
+
+```sh
+docker compose -f docker-compose.prod.yml up --build -d --wait
+```
+
+The stack includes PostgreSQL, migrations, the web app, API, agent, and scheduled API jobs.
+See [Docker deployment](./docs/setup.md#docker-deployment) for required settings, HTTPS, backups, and upgrades.
+GitHub Actions can build and publish these images to GHCR.
+See [registry deployment](./docs/setup.md#github-container-registry) to pull them without building on the server.
+
+### Separate hosting
+
 Three deployments and a Postgres: the Next.js app, the NestJS API, and the agent.
 They are independent, and the only thing they must agree on is `DATABASE_URL` and
 `BETTER_AUTH_SECRET` — the API mints the session cookie and the app verifies it, so a

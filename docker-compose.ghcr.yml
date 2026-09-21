@@ -1,0 +1,11 @@
+services:
+  web:
+    image: ${IMAGE_PREFIX:-ghcr.io/htlabs-xyz/htcrm}-web:${IMAGE_TAG:-latest}
+  api:
+    image: ${IMAGE_PREFIX:-ghcr.io/htlabs-xyz/htcrm}-api:${IMAGE_TAG:-latest}
+  agent:
+    image: ${IMAGE_PREFIX:-ghcr.io/htlabs-xyz/htcrm}-agent:${IMAGE_TAG:-latest}
+  migrate:
+    image: ${IMAGE_PREFIX:-ghcr.io/htlabs-xyz/htcrm}-migrate:${IMAGE_TAG:-latest}
+  scheduler:
+    image: ${IMAGE_PREFIX:-ghcr.io/htlabs-xyz/htcrm}-scheduler:${IMAGE_TAG:-latest}
