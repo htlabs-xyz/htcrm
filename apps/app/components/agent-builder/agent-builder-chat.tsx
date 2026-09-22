@@ -1200,12 +1200,14 @@ function BuilderFailureCard({
 }) {
 	const message =
 		failure.kind === "rate-limit"
-			? "Vercel AI Gateway rate-limited this model before it could start. Try again in a moment or add AI Gateway credits in Vercel."
+			? "Cloudflare AI Gateway rate-limited this model before it could start. Try again in a moment or check the account limits in Cloudflare."
 			: failure.kind === "restricted"
-				? "This model requires paid AI Gateway credits. Add credits in Vercel, then try again."
+				? "This model requires paid AI Gateway credits. Check Unified Billing in Cloudflare, then try again."
 				: failure.kind === "credits"
-					? "Vercel AI Gateway has no available credits. Add credits in Vercel, then try again."
-					: "The builder could not finish this request. Try again.";
+					? "Cloudflare AI Gateway has no available credits. Check Unified Billing in Cloudflare, then try again."
+					: failure.kind === "configuration"
+						? "Check Cloudflare AI in Settings → General: enter a valid key and choose a supported model. Rebuild deployed agents that use an unavailable model."
+						: "The builder could not finish this request. Try again.";
 
 	return (
 		<div

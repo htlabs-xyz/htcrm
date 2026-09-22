@@ -5,10 +5,12 @@ import { AuthMiddleware } from "../trpc/middlewares/auth.middleware";
 import { restMeta } from "../trpc/openapi";
 import {
 	agentModelOutput,
+	aiGatewayKeyOutput,
 	archiveRetentionOutput,
 	modelCatalogOutput,
 	researchKeyOutput,
 	setAgentModelInput,
+	setAiGatewayKeyInput,
 	setArchiveRetentionDaysInput,
 	setResearchKeyInput,
 } from "./settings.contracts";
@@ -35,6 +37,23 @@ export class SettingsRouter {
 	})
 	async modelCatalog() {
 		return this.settings.modelCatalog();
+	}
+
+	@Query({
+		output: aiGatewayKeyOutput,
+		meta: restMeta("GET", "/settings/ai-gateway-key", ["Settings"]),
+	})
+	async aiGatewayKey() {
+		return this.settings.aiGatewayKey();
+	}
+
+	@Mutation({
+		input: setAiGatewayKeyInput,
+		output: aiGatewayKeyOutput,
+		meta: restMeta("PATCH", "/settings/ai-gateway-key", ["Settings"]),
+	})
+	async setAiGatewayKey(@Input() input: z.infer<typeof setAiGatewayKeyInput>) {
+		return this.settings.setAiGatewayKey(input.apiKey);
 	}
 
 	@Mutation({

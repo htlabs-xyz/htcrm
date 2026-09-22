@@ -1,4 +1,7 @@
+import { fetchGatewayCatalog, GatewayCatalogError } from "@crm/ai-gateway";
+import { gatewayAccountId } from "@crm/ai-gateway/config";
 import type { Db } from "@crm/db";
+import { readGatewayKey, writeGatewayKey } from "@crm/db/ai-gateway-key";
 import {
 	DEFAULT_AGENT_MODEL,
 	maskKey,
@@ -16,6 +19,7 @@ import { InjectDatabase } from "../database/database.constants";
 import { ModelCatalogService } from "./model-catalog.service";
 import type {
 	AgentModelSettings,
+	AiGatewayKeySettings,
 	ArchiveRetentionSettings,
 	ModelCatalogResult,
 	ResearchKeySettings,
@@ -66,7 +70,7 @@ export class SettingsService {
 
 		if (!chosen) {
 			throw new BadRequestException(
-				`The AI Gateway does not serve a tool-using model called "${modelId}".`,
+				`The AI Gateway does not list a supported chat model called "${modelId}".`,
 			);
 		}
 
@@ -89,6 +93,51 @@ export class SettingsService {
 		const key = await readContextDevKey(this.db);
 
 		return { configured: key !== null, hint: key ? maskKey(key) : null };
+	}
+
+	async aiGatewayKey(): Promise<AiGatewayKeySettings> {
+		const accountConfigured = gatewayAccountId() !== null;
+		try {
+			const key = await readGatewayKey(this.db);
+			return {
+				configured: key !== null,
+				hint: key ? maskKey(key) : null,
+				accountConfigured,
+				needsReplacement: false,
+			};
+		} catch {
+			return {
+				configured: false,
+				hint: null,
+				accountConfigured,
+				needsReplacement: true,
+			};
+		}
+	}
+
+	async setAiGatewayKey(apiKey: string | null): Promise<AiGatewayKeySettings> {
+		if (apiKey !== null) {
+			const accountId = gatewayAccountId();
+			if (!accountId)
+				throw new BadRequestException(
+					"Configure CLOUDFLARE_ACCOUNT_ID on the CRM server first.",
+				);
+			try {
+				await fetchGatewayCatalog(accountId, apiKey);
+			} catch (error) {
+				throw new BadRequestException(
+					error instanceof GatewayCatalogError
+						? error.message
+						: "Could not verify the Cloudflare key. Try again.",
+				);
+			}
+		}
+		await writeGatewayKey(this.db, apiKey);
+		this.logger.log({
+			message:
+				apiKey === null ? "Cloudflare key removed" : "Cloudflare key saved",
+		});
+		return this.aiGatewayKey();
 	}
 
 	async setResearchKey(apiKey: string): Promise<ResearchKeySettings> {

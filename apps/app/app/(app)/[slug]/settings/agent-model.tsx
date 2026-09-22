@@ -96,9 +96,7 @@ export function AgentModel() {
 
 	const effectiveName = effective?.name ?? effectiveId;
 
-	const currentLabel = selectedId
-		? effectiveName
-		: `Default — ${effectiveName}`;
+	const currentLabel = selectedId ? effectiveName : "Choose a model";
 
 	const choose = (id: string) => {
 		setOpen(false);
@@ -109,9 +107,10 @@ export function AgentModel() {
 	return (
 		<Card>
 			<CardHeader>
-				<CardTitle>Research agent</CardTitle>
+				<CardTitle>AI model</CardTitle>
 				<CardDescription>
-					The model the agent thinks with, routed through the Vercel AI Gateway.
+					Choose from Cloudflare AI Gateway models. Changes apply to new
+					sessions.
 				</CardDescription>
 			</CardHeader>
 
@@ -136,15 +135,17 @@ export function AgentModel() {
 							<CommandList>
 								<CommandEmpty>No model matches that.</CommandEmpty>
 
-								<CommandGroup>
-									<CommandItem
-										value={`default ${defaultId}`}
-										data-checked={current === FOLLOW_DEFAULT}
-										onSelect={() => choose(FOLLOW_DEFAULT)}
-									>
-										Default — {defaultModel?.name ?? defaultId}
-									</CommandItem>
-								</CommandGroup>
+								{defaultModel ? (
+									<CommandGroup>
+										<CommandItem
+											value={`default ${defaultId}`}
+											data-checked={current === FOLLOW_DEFAULT}
+											onSelect={() => choose(FOLLOW_DEFAULT)}
+										>
+											Default — {defaultModel?.name ?? defaultId}
+										</CommandItem>
+									</CommandGroup>
+								) : null}
 
 								{byProvider(models).map(([provider, group]) => (
 									<CommandGroup key={provider} heading={provider}>
@@ -174,12 +175,14 @@ export function AgentModel() {
 
 				<p className="text-muted-foreground text-xs">
 					{unavailable
-						? `Could not reach the AI Gateway to list models. The agent is still running ${effectiveId}.`
+						? "Save a valid Cloudflare key to load models. If a key is saved, check its permissions and try again."
 						: effective
 							? `${effectiveId} · ${contextHint(effective.contextWindowTokens)}${
 									priceHint(effective) ? ` · ${priceHint(effective)}` : ""
 								}`
-							: effectiveId}
+							: selectedId
+								? `${effectiveId} is not available in the Cloudflare catalog. Choose another model.`
+								: "Choose a model to enable AI. Models with incomplete catalog metadata are not listed."}
 				</p>
 			</CardContent>
 		</Card>

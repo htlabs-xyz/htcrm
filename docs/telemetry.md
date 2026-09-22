@@ -294,7 +294,7 @@ default and the page has no field to type in.
 - `EmailThread` and `EmailMessage` subjects or bodies, `CalendarEvent` titles, `CalendarAttendee` rows
 - `Deal` names and amounts. Stage distribution is fine; amounts are not.
 - `AgentEvent.data`, `AgentConversation` content, prompts, completions, reasoning traces
-- `ALLOWED_SIGN_IN`, `AppSetting.contextDevApiKey`, any key, secret, token or connection string
+- `ALLOWED_SIGN_IN`, `AppSetting.contextDevApiKey`, `AppSetting.cloudflareApiToken`, any key, secret, token or connection string
 - `SuppressedDomain` and `SuppressedContact` values — counts only
 - **IP address.** Set `$ip: null` and disable geoip. n8n collects IP and has to caveat their
   anonymity claim because of it. We do not need it and we would rather the claim be unqualified.

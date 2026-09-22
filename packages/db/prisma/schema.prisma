@@ -1305,6 +1305,8 @@ model AppSetting {
 
   contextDevApiKey String?
 
+  cloudflareApiToken String?
+
   reportingCurrency String?
 
   ratesRefreshedAt DateTime?

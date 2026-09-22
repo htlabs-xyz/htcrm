@@ -1,0 +1,5 @@
+{
+	"extends": "@crm/typescript-config/internal-package.json",
+	"compilerOptions": { "types": ["node"] },
+	"include": ["src/**/*.ts"]
+}

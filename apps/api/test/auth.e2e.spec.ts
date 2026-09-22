@@ -78,4 +78,14 @@ describe("Auth (e2e)", () => {
 
 		expect(response.status).toBe(401);
 	});
+
+	it("keeps Cloudflare key reads and writes behind the session", async () => {
+		await request(app.getHttpServer())
+			.get("/api/trpc/settings.aiGatewayKey")
+			.expect(401);
+		await request(app.getHttpServer())
+			.post("/api/trpc/settings.setAiGatewayKey")
+			.send({ apiKey: "test-unauthenticated-token" })
+			.expect(401);
+	});
 });

@@ -490,6 +490,36 @@ describe("pendingQuestion", () => {
 });
 
 describe("latestTurnFailure", () => {
+	it.each([
+		[
+			"Enter a Cloudflare key and choose a model in Settings to enable AI.",
+			"configuration",
+		],
+		[
+			"Cloudflare refused the key. Replace it in Settings with a token that has Workers AI Read.",
+			"configuration",
+		],
+		[
+			"The saved model is unavailable on Cloudflare. Choose a model in Settings.",
+			"configuration",
+		],
+		[
+			"Cloudflare could not run the selected model (HTTP 429). Check the model and account in Cloudflare.",
+			"rate-limit",
+		],
+		[
+			"Cloudflare AI credits are unavailable. Check Unified Billing in Cloudflare.",
+			"credits",
+		],
+	] as const)(
+		"classifies Cloudflare failures without exposing provider details: %s",
+		(message, kind) => {
+			expect(
+				latestTurnFailure([{ type: "turn.failed", data: { message } }]),
+			).toEqual({ code: "AGENT_FAILED", kind });
+		},
+	);
+
 	it("recognizes the Vercel Gateway free-tier rate limit", () => {
 		expect(
 			latestTurnFailure([

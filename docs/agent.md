@@ -11,16 +11,18 @@ are in `docs/setup.md`.
 
 ## Model
 
-Default `zai/glm-5.2-fast`; `DEFAULT_AGENT_MODEL` in `@crm/db/settings` because the
-agent and the API both need it.
+Models run through Cloudflare AI Gateway. Settings → General stores the token and model choice.
 
-- **A row (`AppSetting`), not an env var**, via `defineDynamic` on `session.started`.
-  Open conversations keep their model — prompt caches are per model.
-- **`lib/model.ts` always sends `modelContextWindowTokens`**; eve never inherits it.
-- **A failed read logs and keeps the compiled fallback.** Never throws.
-- **The chooser offers only `tool-use` models** (`ModelCatalogService`).
-- **Not a frontier model, deliberately** — refusing wrong answers is enforced by the
-  tools and evidence model, not model strength.
+- `@crm/ai-gateway` reads Cloudflare's paginated third-party catalog. It requires a supported request format and known context window.
+- `lib/cloudflare-model.ts` selects the catalog's chat completions, Responses, or Anthropic Messages protocol.
+- `lib/cloudflare-session-model.ts` pins serializable model metadata in Eve session state at the first model step.
+- Every step creates a provider model with the current token. Tokens never enter durable session state.
+- All three agents use this path. Team-agent runs retain their immutable version's model choice.
+- Missing configuration returns a clear error before inference. No resolver failure falls back to Vercel.
+- `DEFAULT_AGENT_MODEL` remains legacy database compatibility metadata. It does not select a new Cloudflare model.
+- Existing Vercel-only selections require a new selection. Rebuild deployed team agents that reference unavailable models.
+- Catalog prices are converted from per-million to per-token units. Tiered or unknown prices stay absent.
+- The key-only catalog covers third-party REST models. Workers AI models require separate gateway configuration and are excluded.
 
 ## Pictures are copied, never linked
 

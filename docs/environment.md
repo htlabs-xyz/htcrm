@@ -126,12 +126,24 @@ single place that knows what is set.
 | `PERPLEXITY_API_KEY` | Open-web research with citations; finds a LinkedIn slug |
 | `GITHUB_TOKEN` | Raises the GitHub rate limit from 60/hour |
 | `BLOB_READ_WRITE_TOKEN` | Mirrors logos and photos into Blob |
-| `AI_GATEWAY_API_KEY` | The model. Not needed on Vercel (OIDC) |
+| `CLOUDFLARE_ACCOUNT_ID` | Account used by the Cloudflare model catalog and inference |
 | `AGENT_BRIDGE_SECRET` | The rep-facing Agent panel — see `agent.md` |
 
 `BLOB_READ_WRITE_TOKEN` is also in `env.validation.ts` and `apps/api/turbo.json`
 because the API and the seed write pictures too. The Next.js app is deliberately
 excluded — recognising our URL for the image optimizer needs no token.
+
+### Cloudflare AI key
+
+Set `CLOUDFLARE_ACCOUNT_ID` on the server. Enter a Cloudflare API token in Settings → General, then choose a model.
+The token needs **Account → Workers AI → Read** for that account. An AI Gateway-only token is insufficient.
+The app starts without a token. AI calls remain unavailable until a token and supported model are selected.
+Third-party requests use Cloudflare's default gateway and Unified Billing. Saving a token does not purchase credits.
+
+`AppSetting.cloudflareApiToken` stores AES-256-GCM ciphertext. Encryption derives from `BETTER_AUTH_SECRET`.
+Rotating that secret requires re-entering the token. API responses return only status and the last four characters.
+The agent reads the token at each step, so replacements need no deployment. Removing it stops subsequent model calls.
+`AI_GATEWAY_API_KEY` and Vercel OIDC no longer configure CRM inference.
 
 ### The Context key is asked for, not configured
 

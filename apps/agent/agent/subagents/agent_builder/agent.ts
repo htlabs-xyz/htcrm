@@ -1,14 +1,16 @@
 import { DEFAULT_AGENT_MODEL } from "@crm/db/settings";
 import { defineAgent, defineDynamic } from "eve";
 import { z } from "zod";
-import { selectedModel } from "../../lib/model";
+import { unavailableModel } from "../../lib/cloudflare-model";
+import { cloudflareSessionModel } from "../../lib/cloudflare-session-model";
 
 export default defineAgent({
+	modelContextWindowTokens: DEFAULT_AGENT_MODEL.contextWindowTokens,
 	description:
 		"Turn one private CRM builder-chat request into a validated, reviewable team-agent version without deploying it.",
 	model: defineDynamic({
-		fallback: DEFAULT_AGENT_MODEL.id,
-		events: { "session.started": () => selectedModel() },
+		fallback: unavailableModel(),
+		events: { "step.started": () => cloudflareSessionModel() },
 	}),
 	outputSchema: z.object({
 		status: z.literal("draft_ready"),

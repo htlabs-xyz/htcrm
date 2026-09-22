@@ -38,6 +38,17 @@ export const researchKeyOutput = z.object({
 
 export type ResearchKeySettings = z.infer<typeof researchKeyOutput>;
 
+export const aiGatewayKeyOutput = researchKeyOutput.extend({
+	accountConfigured: z.boolean(),
+	needsReplacement: z.boolean(),
+});
+
+export type AiGatewayKeySettings = z.infer<typeof aiGatewayKeyOutput>;
+
+export const setAiGatewayKeyInput = z.object({
+	apiKey: z.string().trim().min(20).max(500).regex(/^\S+$/).nullable(),
+});
+
 export const archiveRetentionOutput = z.object({
 	days: z.number(),
 });

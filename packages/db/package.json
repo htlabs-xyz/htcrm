@@ -6,6 +6,7 @@
 	"exports": {
 		".": "./src/index.ts",
 		"./agent-tasks": "./src/agent-tasks.ts",
+		"./ai-gateway-key": "./src/ai-gateway-key.ts",
 		"./attribution": "./src/attribution.ts",
 		"./blob": "./src/blob.ts",
 		"./client": "./src/client.ts",

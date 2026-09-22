@@ -51,7 +51,7 @@ export type Source = {
 
 export type AgentTurnFailure = {
 	code: string;
-	kind: "rate-limit" | "restricted" | "credits" | "unknown";
+	kind: "rate-limit" | "restricted" | "credits" | "configuration" | "unknown";
 };
 
 type ToolVerbs = Record<string, string>;
@@ -369,13 +369,17 @@ export function latestTurnFailure(
 				message,
 			)
 				? "restricted"
-				: /GatewayRateLimitError|free tier requests.*rate-?limited/i.test(
+				: /GatewayRateLimitError|free tier requests.*rate-?limited|Cloudflare.*HTTP 429/i.test(
 							message,
 						)
 					? "rate-limit"
 					: /credits?|quota|billing|usage limit/i.test(message)
 						? "credits"
-						: "unknown",
+						: /Cloudflare (key|refused the key)|CLOUDFLARE_ACCOUNT_ID|saved model is unavailable on Cloudflare|Could not load AI setup|Cloudflare.*Workers AI Read/i.test(
+									message,
+								)
+							? "configuration"
+							: "unknown",
 		};
 	}
 
