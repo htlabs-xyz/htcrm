@@ -17,6 +17,9 @@ The optional model list comes from the provider's `/models` endpoint. Unknown li
 
 - `lib/openai-compatible-model.ts` uses Chat Completions directly. It preserves the base URL prefix and upstream model ID.
 - Save and test uses the Agent bridge to check streaming and a harmless tool round trip. Provider credits apply.
+- The test uses automatic tool selection and preserves reasoning through the tool-result turn. It requires a completed final answer.
+- Each test turn uses the smaller of the configured response budget and `AI_PROVIDER.verifyOutputTokens`. Truncation reports a token-limit error.
+- Verification exposes only local error messages. HTTP failures retain their category; provider response bodies and credentials remain hidden.
 - Failed verification preserves the saved configuration. The API serves metadata and configuration; inference stays in the Agent.
 - `lib/provider-session-model.ts` pins provider identity, model, and limits in Eve state. All three agents use `step.started`.
 - Each step reads the current encrypted key. Secrets never enter session state.

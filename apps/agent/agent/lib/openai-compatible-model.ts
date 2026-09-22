@@ -31,12 +31,19 @@ export function unavailableModel(
 	};
 }
 
+export class AiProviderModelError extends Error {
+	constructor(statusCode?: number) {
+		super(
+			statusCode
+				? providerError(statusCode)
+				: "The AI provider returned an invalid response or the request was interrupted. Check the endpoint and model.",
+		);
+		this.name = "AiProviderModelError";
+	}
+}
+
 function safeModelError(error: APICallError | null): Error {
-	return new Error(
-		error?.statusCode
-			? providerError(error.statusCode)
-			: "The AI provider returned an invalid response or the request was interrupted. Check the endpoint and model.",
-	);
+	return new AiProviderModelError(error?.statusCode);
 }
 
 export function openAICompatibleModel(

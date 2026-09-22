@@ -9,5 +9,5 @@ export const AI_PROVIDER = {
 	maxRequestBytes: 32_000_000,
 	maxContextTokens: 10_000_000,
 	maxOutputTokens: 1_000_000,
-	verifyOutputTokens: 256,
+	verifyOutputTokens: 4096,
 } as const;
