@@ -1,12 +1,19 @@
+import {
+	aiProviderConnectionInput,
+	aiProviderInput,
+} from "@crm/validation/ai-provider";
 import { Inject } from "@nestjs/common";
 import { Input, Mutation, Query, Router, UseMiddlewares } from "nestjs-trpc";
 import type { z } from "zod";
 import { AuthMiddleware } from "../trpc/middlewares/auth.middleware";
 import { restMeta } from "../trpc/openapi";
+import { AiProviderService } from "./ai-provider.service";
 import {
 	agentModelOutput,
+	aiProviderOutput,
 	archiveRetentionOutput,
 	modelCatalogOutput,
+	removeAiProviderInput,
 	researchKeyOutput,
 	setAgentModelInput,
 	setArchiveRetentionDaysInput,
@@ -19,7 +26,47 @@ import { SettingsService } from "./settings.service";
 export class SettingsRouter {
 	constructor(
 		@Inject(SettingsService) private readonly settings: SettingsService,
+		@Inject(AiProviderService) private readonly provider: AiProviderService,
 	) {}
+
+	@Query({
+		output: aiProviderOutput,
+		meta: restMeta("GET", "/settings/ai-provider", ["Settings"]),
+	})
+	async aiProvider() {
+		return this.provider.settings();
+	}
+
+	@Mutation({
+		input: aiProviderInput,
+		output: aiProviderOutput,
+		meta: restMeta("PATCH", "/settings/ai-provider", ["Settings"]),
+	})
+	async setAiProvider(@Input() input: z.infer<typeof aiProviderInput>) {
+		return this.provider.save(input);
+	}
+
+	@Mutation({
+		input: aiProviderConnectionInput,
+		output: modelCatalogOutput,
+		meta: restMeta("POST", "/settings/ai-provider/models", ["Settings"]),
+	})
+	async providerModels(
+		@Input() input: z.infer<typeof aiProviderConnectionInput>,
+	) {
+		return this.provider.models(input);
+	}
+
+	@Mutation({
+		input: removeAiProviderInput,
+		output: aiProviderOutput,
+		meta: restMeta("POST", "/settings/ai-provider/remove", ["Settings"]),
+	})
+	async removeAiProvider(
+		@Input() input: z.infer<typeof removeAiProviderInput>,
+	) {
+		return this.provider.remove(input.revision);
+	}
 
 	@Query({
 		output: agentModelOutput,

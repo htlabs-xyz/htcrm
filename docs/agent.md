@@ -11,16 +11,23 @@ are in `docs/setup.md`.
 
 ## Model
 
-Default `zai/glm-5.2-fast`; `DEFAULT_AGENT_MODEL` in `@crm/db/settings` because the
-agent and the API both need it.
+Settings → General → AI provider stores one shared OpenAI-compatible connection.
+Enter a public HTTPS API base URL, provider key, exact model ID, context window, and response budget.
+The optional model list comes from the provider's `/models` endpoint. Unknown limits require manual entry.
 
-- **A row (`AppSetting`), not an env var**, via `defineDynamic` on `session.started`.
-  Open conversations keep their model — prompt caches are per model.
-- **`lib/model.ts` always sends `modelContextWindowTokens`**; eve never inherits it.
-- **A failed read logs and keeps the compiled fallback.** Never throws.
-- **The chooser offers only `tool-use` models** (`ModelCatalogService`).
-- **Not a frontier model, deliberately** — refusing wrong answers is enforced by the
-  tools and evidence model, not model strength.
+- `lib/openai-compatible-model.ts` uses Chat Completions directly. It preserves the base URL prefix and upstream model ID.
+- Save and test uses the Agent bridge to check streaming and a harmless tool round trip. Provider credits apply.
+- Failed verification preserves the saved configuration. The API serves metadata and configuration; inference stays in the Agent.
+- `lib/provider-session-model.ts` pins provider identity, model, and limits in Eve state. All three agents use `step.started`.
+- Each step reads the current encrypted key. Secrets never enter session state.
+- Default model changes affect new sessions. Key rotation preserves the provider identity.
+- Endpoint replacement creates a new identity. Old sessions stop with a clear error; deployed agents require rebuilding.
+- Agent versions retain provider identity and output limits when copied. Legacy versions require rebuilding for the new provider.
+- Missing configuration disables inference. No Vercel or Cloudflare fallback exists.
+- There is no default gateway model. New versions require a complete provider
+  configuration; saving a draft locks that configuration until the version is written.
+- `@crm/db/ai-provider-http` validates public DNS answers, connects to a validated IP, and verifies TLS for the original host.
+- Redirects, private endpoints, and URL credentials are refused. Catalog reads have a size limit; requests have an abort timeout.
 
 ## Pictures are copied, never linked
 

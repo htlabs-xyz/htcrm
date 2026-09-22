@@ -92,7 +92,6 @@ services:
       <<: *app-environment
       HOST: 0.0.0.0
       PORT: "2000"
-      AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:-}
       PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY:-}
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       BLOB_READ_WRITE_TOKEN: ${BLOB_READ_WRITE_TOKEN:-}

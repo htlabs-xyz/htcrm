@@ -1,4 +1,5 @@
 import { db } from "@crm/db";
+import { readAiProvider } from "@crm/db/ai-provider";
 import { agentManifest } from "@crm/validation/agent-manifest";
 import { defineEval } from "eve/evals";
 import { equals, satisfies } from "eve/evals/expect";
@@ -13,10 +14,10 @@ export default defineEval({
 		if (
 			!process.env.DATABASE_URL ||
 			!secret ||
-			(!process.env.AI_GATEWAY_API_KEY && !process.env.VERCEL_OIDC_TOKEN)
+			!(await readAiProvider(db))?.aiProviderApiKey
 		) {
 			t.skip(
-				"Requires DATABASE_URL, AGENT_BRIDGE_SECRET, and an AI Gateway credential.",
+				"Requires DATABASE_URL, AGENT_BRIDGE_SECRET, and an OpenAI-compatible provider in Settings.",
 			);
 			return;
 		}

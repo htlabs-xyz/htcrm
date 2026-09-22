@@ -1,28 +1,13 @@
-import { db } from "@crm/db";
-import { readAgentModel } from "@crm/db/settings";
 import { agentError, modelError } from "@crm/telemetry";
 import { defineHook } from "eve/hooks";
 import { z } from "zod";
+import { pinnedProviderModelId } from "../lib/provider-session-model";
 
 type SessionPrincipal = {
 	readonly attributes?: Readonly<Record<string, string | readonly string[]>>;
 } | null;
 
 const attributeText = z.string().trim().min(1).nullable().catch(null);
-
-let modelId: string | null = null;
-
-async function configuredModel(): Promise<string | null> {
-	if (modelId) return modelId;
-
-	try {
-		modelId = (await readAgentModel(db)).id;
-	} catch {
-		modelId = null;
-	}
-
-	return modelId;
-}
 
 const MODEL_CODES = [
 	"model",
@@ -73,12 +58,12 @@ export default defineHook({
 			});
 		},
 
-		async "step.failed"(event) {
+		"step.failed"(event) {
 			if (!looksLikeModel(event.data.code)) return;
 
 			modelError({
 				error: event.data.code,
-				modelId: await configuredModel(),
+				modelId: pinnedProviderModelId(),
 			});
 		},
 	},

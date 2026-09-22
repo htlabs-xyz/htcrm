@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@crm/db";
+import { readAiProvider, writeAiProvider } from "@crm/db/ai-provider";
+import { SETTINGS_ID } from "@crm/db/settings";
 import { persistBuilderInputRequest } from "../agent/lib/builder-input";
 import {
 	saveBuilderDraft,
@@ -13,8 +15,24 @@ const userId = `builder-runtime-user-${suffix}`;
 let conversationId = "";
 let agentId = "";
 const conversationIds: string[] = [];
+let originalSettings: Awaited<ReturnType<typeof db.appSetting.findUnique>>;
+const providerInput = {
+	baseUrl: "https://api.example.com/v1",
+	apiKey: "builder-test-provider-key",
+	modelId: "builder-model",
+	contextWindowTokens: 32000,
+	maxOutputTokens: 2000,
+};
 
 beforeAll(async () => {
+	originalSettings = await db.appSetting.findUnique({
+		where: { id: SETTINGS_ID },
+	});
+	await writeAiProvider(
+		db,
+		providerInput,
+		originalSettings?.aiProviderRevision ?? null,
+	);
 	await db.user.create({
 		data: {
 			id: userId,
@@ -35,6 +53,8 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+	await db.appSetting.deleteMany({ where: { id: SETTINGS_ID } });
+	if (originalSettings) await db.appSetting.create({ data: originalSettings });
 	const agentIds = (
 		await db.agentDefinition.findMany({
 			where: { createdById: userId },
@@ -74,6 +94,48 @@ afterAll(async () => {
 });
 
 describe("builder persistence", () => {
+	it("refuses new drafts after the provider is removed", async () => {
+		const provider = await readAiProvider(db);
+		await writeAiProvider(db, null, provider?.aiProviderRevision ?? null);
+		try {
+			const saved = await saveBuilderDraft(conversationId, userId, {
+				name: "Connection check",
+				description: "Prepare a CRM summary.",
+				instructions:
+					"When manually triggered, summarize the CRM records without changing any external systems.",
+				triggers: [
+					{
+						type: "MANUAL",
+						name: "Manual",
+						summary: "Run when requested by a rep.",
+					},
+				],
+				recordScope: "WORKSPACE",
+				resources: [],
+				actions: [
+					{
+						type: "run.summary",
+						provider: "crm",
+						summary: "Write a run summary.",
+					},
+				],
+				access: ["Read CRM records"],
+			});
+			expect(saved.saved).toBe(false);
+			if (!saved.saved)
+				expect(saved.issues.join(" ")).toContain("Configure an AI provider");
+			expect(
+				await db.agentDefinition.count({ where: { createdById: userId } }),
+			).toBe(0);
+		} finally {
+			const removed = await readAiProvider(db);
+			await writeAiProvider(
+				db,
+				providerInput,
+				removed?.aiProviderRevision ?? null,
+			);
+		}
+	});
 	it("persists a proxied child question on its builder conversation", async () => {
 		const request = {
 			kind: "question",
@@ -308,6 +370,14 @@ describe("builder persistence", () => {
 		agentId = saved[0]?.agentId ?? "";
 		expect(await db.agentDefinition.count({ where: { id: agentId } })).toBe(1);
 		expect(await db.agentVersion.count({ where: { agentId } })).toBe(1);
+		const version = await db.agentVersion.findFirstOrThrow({
+			where: { agentId },
+		});
+		expect(version.modelId).toBe(providerInput.modelId);
+		expect(version.modelProviderId).toBe(
+			(await readAiProvider(db))?.aiProviderId,
+		);
+		expect(version.modelMaxOutputTokens).toBe(providerInput.maxOutputTokens);
 
 		const artifact = await db.agentBuilderArtifact.findFirstOrThrow({
 			where: { conversationId, path: "agent/instructions.md" },

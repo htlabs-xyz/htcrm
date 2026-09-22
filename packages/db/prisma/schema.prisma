@@ -693,7 +693,9 @@ model AgentVersion {
   instructions             String
   manifest                 Json
   modelId                  String
-  modelContextWindowTokens Int    @default(1000000)
+  modelContextWindowTokens Int     @default(1000000)
+  modelProviderId          String?
+  modelMaxOutputTokens     Int?
   sandboxPolicy            Json
   validation               Json?
 
@@ -1301,7 +1303,13 @@ model AppSetting {
 
   agentModelId String?
 
-  agentModelContextWindow Int?
+  agentModelContextWindow   Int?
+  agentModelMaxOutputTokens Int?
+  aiProviderId              String?
+  aiProviderRevision        String?
+  aiProviderBaseUrl         String?
+  aiProviderApiKey          String?
+  cloudflareApiToken        String?
 
   contextDevApiKey String?
 

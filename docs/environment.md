@@ -126,12 +126,21 @@ single place that knows what is set.
 | `PERPLEXITY_API_KEY` | Open-web research with citations; finds a LinkedIn slug |
 | `GITHUB_TOKEN` | Raises the GitHub rate limit from 60/hour |
 | `BLOB_READ_WRITE_TOKEN` | Mirrors logos and photos into Blob |
-| `AI_GATEWAY_API_KEY` | The model. Not needed on Vercel (OIDC) |
 | `AGENT_BRIDGE_SECRET` | The rep-facing Agent panel — see `agent.md` |
 
 `BLOB_READ_WRITE_TOKEN` is also in `env.validation.ts` and `apps/api/turbo.json`
 because the API and the seed write pictures too. The Next.js app is deliberately
 excluded — recognising our URL for the image optimizer needs no token.
+
+### OpenAI-compatible provider
+
+Configure Settings → General → AI provider. The connection is shared across the CRM.
+Use a public HTTPS API base URL and the provider's API key. No gateway account or environment key is required.
+The model list is optional. Enter the model ID and documented context/output limits when metadata is absent.
+Save and test requires the Agent bridge and uses a small amount of provider credit.
+Keys use AES-256-GCM with a key derived from `BETTER_AUTH_SECRET`, bound to the provider identity.
+Keep that secret stable. Changing it requires re-entering the provider key.
+The former Cloudflare token column remains unused for migration compatibility. It is never used as a direct provider key.
 
 ### The Context key is asked for, not configured
 

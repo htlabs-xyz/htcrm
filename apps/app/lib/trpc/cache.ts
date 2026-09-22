@@ -275,6 +275,8 @@ export function useCrmCache(): CrmCache {
 			run(
 				[
 					trpc.settings.agentModel.queryKey(),
+					trpc.settings.aiProvider.queryKey(),
+					trpc.settings.modelCatalog.queryKey(),
 					trpc.settings.researchKey.queryKey(),
 					trpc.settings.archiveRetention.queryKey(),
 				],

@@ -1,14 +1,16 @@
-import { DEFAULT_AGENT_MODEL } from "@crm/db/settings";
+import { AI_PROVIDER } from "@crm/db/ai-provider-config";
 import { defineAgent, defineDynamic } from "eve";
 import { z } from "zod";
-import { selectedModel } from "../../lib/model";
+import { unavailableModel } from "../../lib/openai-compatible-model";
+import { providerSessionModel } from "../../lib/provider-session-model";
 
 export default defineAgent({
+	modelContextWindowTokens: AI_PROVIDER.unconfiguredContextTokens,
 	description:
 		"Turn one private CRM builder-chat request into a validated, reviewable team-agent version without deploying it.",
 	model: defineDynamic({
-		fallback: DEFAULT_AGENT_MODEL.id,
-		events: { "session.started": () => selectedModel() },
+		fallback: unavailableModel(),
+		events: { "step.started": () => providerSessionModel() },
 	}),
 	outputSchema: z.object({
 		status: z.literal("draft_ready"),

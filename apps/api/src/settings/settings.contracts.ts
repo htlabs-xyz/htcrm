@@ -8,7 +8,8 @@ export const catalogModelOutput = z.object({
 	id: z.string(),
 	name: z.string(),
 	provider: z.string(),
-	contextWindowTokens: z.number(),
+	contextWindowTokens: z.number().nullable(),
+	maxOutputTokens: z.number().nullable(),
 	pricing: z.object({ input: z.number(), output: z.number() }).nullable(),
 });
 
@@ -16,8 +17,8 @@ export type CatalogModel = z.infer<typeof catalogModelOutput>;
 
 export const agentModelOutput = z.object({
 	selectedId: z.string().nullable(),
-	effectiveId: z.string(),
-	defaultId: z.string(),
+	effectiveId: z.string().nullable(),
+	defaultId: z.string().nullable(),
 	effective: catalogModelOutput.nullable(),
 	updatedAt: z.string().nullable(),
 });
@@ -27,6 +28,7 @@ export type AgentModelSettings = z.infer<typeof agentModelOutput>;
 export const modelCatalogOutput = z.object({
 	models: z.array(catalogModelOutput),
 	available: z.boolean(),
+	message: z.string().nullable(),
 });
 
 export type ModelCatalogResult = z.infer<typeof modelCatalogOutput>;
@@ -81,3 +83,16 @@ export const setArchiveRetentionDaysInput = z.object({
 export type SetArchiveRetentionDaysInput = z.infer<
 	typeof setArchiveRetentionDaysInput
 >;
+
+export const aiProviderOutput = z.object({
+	configured: z.boolean(),
+	baseUrl: z.string(),
+	revision: z.string().nullable(),
+	modelId: z.string().nullable(),
+	contextWindowTokens: z.number().nullable(),
+	maxOutputTokens: z.number().nullable(),
+	needsReplacement: z.boolean(),
+});
+export const removeAiProviderInput = z.object({
+	revision: z.string().uuid().nullable(),
+});

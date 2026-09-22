@@ -1,11 +1,8 @@
 import type { Db } from "@crm/db";
 import {
-	DEFAULT_AGENT_MODEL,
 	maskKey,
-	readAgentModel,
 	readArchiveRetentionDays,
 	readContextDevKey,
-	writeAgentModel,
 	writeArchiveRetentionDays,
 	writeContextDevKey,
 } from "@crm/db/settings";
@@ -13,6 +10,7 @@ import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { ResearchKeyService } from "../agent/research-key.service";
 import { BackfillService } from "../backfill/backfill.service";
 import { InjectDatabase } from "../database/database.constants";
+import { AiProviderService } from "./ai-provider.service";
 import { ModelCatalogService } from "./model-catalog.service";
 import type {
 	AgentModelSettings,
@@ -30,35 +28,44 @@ export class SettingsService {
 		private readonly catalog: ModelCatalogService,
 		private readonly researchKeys: ResearchKeyService,
 		private readonly backfill: BackfillService,
+		private readonly provider: AiProviderService,
 	) {}
 
 	async agentModel(): Promise<AgentModelSettings> {
-		const [model, row] = await Promise.all([
-			readAgentModel(this.db),
+		const [setup, row] = await Promise.all([
+			this.provider.settings(),
 			this.db.appSetting.findFirst({ select: { updatedAt: true } }),
 		]);
-
+		const id = setup.configured ? setup.modelId : null;
 		return {
-			selectedId: model.isDefault ? null : model.id,
-			effectiveId: model.id,
-			defaultId: DEFAULT_AGENT_MODEL.id,
-			effective: await this.catalog.find(model.id),
+			selectedId: id,
+			effectiveId: id,
+			defaultId: null,
+			effective: id
+				? {
+						id,
+						name: id,
+						provider: "OpenAI-compatible",
+						contextWindowTokens: setup.contextWindowTokens,
+						maxOutputTokens: setup.maxOutputTokens,
+						pricing: null,
+					}
+				: null,
 			updatedAt: row?.updatedAt.toISOString() ?? null,
 		};
 	}
 
 	async setAgentModel(modelId: string | null): Promise<AgentModelSettings> {
-		if (modelId === null) {
-			await writeAgentModel(this.db, null);
-			this.logger.log({ message: "Agent model reset to the default" });
-			return this.agentModel();
-		}
+		if (modelId === null)
+			throw new BadRequestException(
+				"There is no default gateway model. Configure or remove the provider in AI provider settings.",
+			);
 
 		const models = await this.catalog.models();
 
 		if (!models) {
 			throw new BadRequestException(
-				"Could not reach the AI Gateway to check that model. Try again in a moment.",
+				"Could not load the model list. Enter the model manually in AI provider settings.",
 			);
 		}
 
@@ -66,13 +73,28 @@ export class SettingsService {
 
 		if (!chosen) {
 			throw new BadRequestException(
-				`The AI Gateway does not serve a tool-using model called "${modelId}".`,
+				`The AI provider catalog does not contain a model called "${modelId}".`,
 			);
 		}
 
-		await writeAgentModel(this.db, {
-			id: chosen.id,
+		const setup = await this.provider.settings();
+		if (
+			!setup.configured ||
+			!chosen.contextWindowTokens ||
+			!setup.maxOutputTokens
+		)
+			throw new BadRequestException(
+				"Set this model and its token limits in AI provider settings.",
+			);
+		await this.provider.save({
+			baseUrl: setup.baseUrl,
+			revision: setup.revision,
+			modelId: chosen.id,
 			contextWindowTokens: chosen.contextWindowTokens,
+			maxOutputTokens: Math.min(
+				setup.maxOutputTokens,
+				chosen.contextWindowTokens - 1,
+			),
 		});
 
 		this.logger.log({ message: "Agent model changed", modelId: chosen.id });
@@ -82,7 +104,14 @@ export class SettingsService {
 
 	async modelCatalog(): Promise<ModelCatalogResult> {
 		const models = await this.catalog.models();
-		return { models: models ?? [], available: models !== null };
+		return {
+			models: models ?? [],
+			available: models !== null,
+			message:
+				models === null
+					? "Enter a model manually in AI provider settings."
+					: null,
+		};
 	}
 
 	async researchKey(): Promise<ResearchKeySettings> {
