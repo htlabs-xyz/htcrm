@@ -46,7 +46,7 @@ if (env.google) {
 	};
 
 	const hostedDomain = primaryWorkspaceDomain();
-	if (hostedDomain) google.hd = hostedDomain;
+	if (hostedDomain && hostedDomain !== "gmail.com") google.hd = hostedDomain;
 
 	socialProviders.google = google;
 }

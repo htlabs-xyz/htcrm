@@ -59,6 +59,11 @@ list, read by the sign-in guard *and* the sync's "which side is external" decisi
 if they drifted a colleague would be refused at the door or filed as a lead. **An empty
 list fails closed.** Parsed on demand. `packages/auth/src/workspace.ts`.
 
+Setting `ALLOWED_SIGN_IN=gmail.com` allows every Gmail account. Google sign-in omits
+the Workspace hosted-domain restriction for this domain because personal Gmail
+accounts have no `hd` claim. The CRM still checks each new user's email against
+`ALLOWED_SIGN_IN`. Other domain entries retain their existing hosted-domain restriction.
+
 ## Where things are
 
 - **`API_URL`** (`:3001`) mints session cookies and serves `/api/auth/*`;
