@@ -109,8 +109,8 @@ export function AgentModel() {
 			<CardHeader>
 				<CardTitle>AI model</CardTitle>
 				<CardDescription>
-					Choose from Cloudflare AI Gateway models. Changes apply to new
-					sessions.
+					Choose models for your saved Cloudflare provider keys. Changes apply
+					to new sessions.
 				</CardDescription>
 			</CardHeader>
 
@@ -175,14 +175,14 @@ export function AgentModel() {
 
 				<p className="text-muted-foreground text-xs">
 					{unavailable
-						? "Save a valid Cloudflare key to load models. If a key is saved, check its permissions and try again."
+						? "Save a valid Cloudflare token to load models. Check token permissions and add a provider key with the default alias in Cloudflare."
 						: effective
 							? `${effectiveId} · ${contextHint(effective.contextWindowTokens)}${
 									priceHint(effective) ? ` · ${priceHint(effective)}` : ""
 								}`
 							: selectedId
-								? `${effectiveId} is not available in the Cloudflare catalog. Choose another model.`
-								: "Choose a model to enable AI. Models with incomplete catalog metadata are not listed."}
+								? `${effectiveId} is not available for your Cloudflare provider keys. Choose another model.`
+								: "Choose a model to enable AI. Add a default provider key in Cloudflare to see its supported models."}
 				</p>
 			</CardContent>
 		</Card>

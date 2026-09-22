@@ -21,6 +21,7 @@ import { ModelCatalogService } from "../src/settings/model-catalog.service";
 import { SettingsService } from "../src/settings/settings.service";
 
 const originalAccount = env.CLOUDFLARE_ACCOUNT_ID;
+const originalGateway = env.CLOUDFLARE_GATEWAY_ID;
 let saved: Prisma.AppSettingUncheckedCreateInput | null;
 let settings: SettingsService;
 let network: ReturnType<typeof spyOn<typeof globalThis, "fetch">>;
@@ -48,6 +49,7 @@ beforeAll(async () => {
 	}).compile();
 	settings = module.get(SettingsService);
 	env.CLOUDFLARE_ACCOUNT_ID = "0".repeat(32);
+	env.CLOUDFLARE_GATEWAY_ID = "gateway";
 });
 
 afterEach(() => network?.mockRestore());
@@ -64,6 +66,8 @@ afterAll(async () => {
 	else await db.appSetting.deleteMany({ where: { id: SETTINGS_ID } });
 	if (originalAccount === undefined) delete env.CLOUDFLARE_ACCOUNT_ID;
 	else env.CLOUDFLARE_ACCOUNT_ID = originalAccount;
+	if (originalGateway === undefined) delete env.CLOUDFLARE_GATEWAY_ID;
+	else env.CLOUDFLARE_GATEWAY_ID = originalGateway;
 });
 
 function mockNetwork(
@@ -77,10 +81,12 @@ function mockNetwork(
 
 describe("Cloudflare Settings", () => {
 	it("saves ciphertext, returns only a hint, selects a model, and removes access", async () => {
-		mockNetwork(async () =>
+		mockNetwork(async (input) =>
 			Response.json({
 				success: true,
-				result: [entry],
+				result: String(input).includes("provider_configs")
+					? [{ provider_slug: "google-ai-studio", alias: "default" }]
+					: [entry],
 				result_info: { total_count: 1 },
 			}),
 		);
@@ -112,10 +118,12 @@ describe("Cloudflare Settings", () => {
 		expect(await readGatewayKey(db)).toBeNull();
 	});
 	it("refuses an invalid replacement and keeps the working key", async () => {
-		mockNetwork(async () =>
+		mockNetwork(async (input) =>
 			Response.json({
 				success: true,
-				result: [entry],
+				result: String(input).includes("provider_configs")
+					? [{ provider_slug: "google-ai-studio", alias: "default" }]
+					: [entry],
 				result_info: { total_count: 1 },
 			}),
 		);
@@ -129,21 +137,47 @@ describe("Cloudflare Settings", () => {
 		expect(await readGatewayKey(db)).toBe("test-working-token-5678");
 	});
 	it("rotates catalog credentials and rejects models outside Cloudflare", async () => {
-		mockNetwork(async (_input, init) => {
+		mockNetwork(async (input, init) => {
 			expect(new Headers(init?.headers).get("authorization")).toBe(
 				"Bearer test-replacement-token-9012",
 			);
 			return Response.json({
 				success: true,
-				result: [entry],
+				result: String(input).includes("provider_configs")
+					? [{ provider_slug: "google-ai-studio", alias: "default" }]
+					: [entry],
 				result_info: { total_count: 1 },
 			});
 		});
 		await settings.setAiGatewayKey("test-replacement-token-9012");
 		await settings.modelCatalog();
-		expect(network).toHaveBeenCalledTimes(2);
+		expect(network).toHaveBeenCalledTimes(4);
 		await expect(settings.setAgentModel("zai/glm-5.2-fast")).rejects.toThrow(
 			"does not list",
 		);
+	});
+	it("does not reuse a catalog after changing the gateway", async () => {
+		const requested: string[] = [];
+		mockNetwork(async (input) => {
+			requested.push(String(input));
+			return Response.json({
+				success: true,
+				result: String(input).includes("provider_configs") ? [] : [entry],
+				result_info: { total_count: 0 },
+			});
+		});
+		try {
+			env.CLOUDFLARE_GATEWAY_ID = "another-gateway";
+			expect(await settings.modelCatalog()).toEqual({
+				available: true,
+				models: [],
+			});
+			expect(requested).toHaveLength(1);
+			expect(requested[0]).toContain(
+				"/gateways/another-gateway/provider_configs",
+			);
+		} finally {
+			env.CLOUDFLARE_GATEWAY_ID = "gateway";
+		}
 	});
 });

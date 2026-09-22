@@ -159,7 +159,8 @@ export class RollupService {
 			cap_cron_secret: isSet("CRON_SECRET"),
 			cap_ai_gateway:
 				Boolean(contextKey?.cloudflareApiToken) &&
-				isSet("CLOUDFLARE_ACCOUNT_ID"),
+				isSet("CLOUDFLARE_ACCOUNT_ID") &&
+				isSet("CLOUDFLARE_GATEWAY_ID"),
 			cap_google_oauth:
 				isSet("GOOGLE_CLIENT_ID") && isSet("GOOGLE_CLIENT_SECRET"),
 			cap_sso_provider: ssoProviders > 0,

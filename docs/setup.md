@@ -115,7 +115,7 @@ It preserves the production stack's health checks, migration ordering, private p
 2. Paste `docker-compose.portainer.yml` into **Web editor**, or select it through **Upload**.
 3. Under **Environment variables**, enter the values below.
 4. Replace the example domain and email. Generate each of the four blank secrets separately with `openssl rand -hex 32`.
-5. Set one complete Google or Microsoft client pair for sign-in. Set `CLOUDFLARE_ACCOUNT_ID`, then enter an API token and choose a model in Settings → General.
+5. Set one complete Google or Microsoft client pair for sign-in. Set `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_GATEWAY_ID`, then enter an API token and choose a model in Settings → General.
 6. Select **Deploy the stack**.
 
 See [Portainer's stack creation instructions](https://docs.portainer.io/user/docker/stacks/add) for its environment import controls.
@@ -138,6 +138,7 @@ MICROSOFT_CLIENT_ID=
 MICROSOFT_CLIENT_SECRET=
 MICROSOFT_TENANT_ID=common
 CLOUDFLARE_ACCOUNT_ID=
+CLOUDFLARE_GATEWAY_ID=
 ```
 
 The `htlabs-xyz/htcrm-*` packages are public. They require no registry credentials.
@@ -191,8 +192,9 @@ Preserve streaming responses. Set `HTTP_PORT` to change the published port.
 Set `HTTP_BIND=127.0.0.1` when a proxy on the same host owns public access.
 The stack publishes no database, API, or agent port. Production cookies require HTTPS for remote sign-in.
 
-`CLOUDFLARE_ACCOUNT_ID` identifies the AI account. Enter its Workers AI Read token in Settings → General.
-Choose a model there. The CRM starts without a key; inference requires a configured token, model, and Cloudflare billing.
+`CLOUDFLARE_ACCOUNT_ID` identifies the AI account; `CLOUDFLARE_GATEWAY_ID` identifies its authenticated BYOK gateway.
+Store provider keys there with alias `default`. Enter a token with AI Gateway Read and Run plus Workers AI Read in Settings → General.
+Choose a supported model there. CRM starts without a key. Inference uses your provider balance and never falls back to Cloudflare-managed billing.
 Configure the Context key during onboarding. Other integration settings remain optional.
 An existing Redis service is supported through `REDIS_URL`; the default is the API's in-memory cache.
 

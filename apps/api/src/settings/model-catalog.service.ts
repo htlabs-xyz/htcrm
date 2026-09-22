@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import { fetchGatewayCatalog, type GatewayModel } from "@crm/ai-gateway";
-import { AI_GATEWAY, gatewayAccountId } from "@crm/ai-gateway/config";
+import {
+	AI_GATEWAY,
+	gatewayAccountId,
+	gatewayId,
+} from "@crm/ai-gateway/config";
 import type { Db } from "@crm/db";
 import { readGatewayKey } from "@crm/db/ai-gateway-key";
 import { CACHE_MANAGER } from "@nestjs/cache-manager";
@@ -21,12 +25,13 @@ export class ModelCatalogService {
 
 	async models(): Promise<CatalogModel[] | null> {
 		const accountId = gatewayAccountId();
-		if (!accountId) return null;
+		const gatewayName = gatewayId();
+		if (!accountId || !gatewayName) return null;
 		try {
 			const token = await readGatewayKey(this.db);
 			if (!token) return null;
 			const fingerprint = createHash("sha256").update(token).digest("hex");
-			const key = `settings:cloudflare-models:${accountId}:${fingerprint}`;
+			const key = `settings:cloudflare-byok-models:${accountId}:${gatewayName}:${fingerprint}`;
 			const cached = await this.cache.get<CatalogModel[]>(key);
 			if (cached) return cached;
 			const models = await fetchGatewayCatalog(accountId, token);

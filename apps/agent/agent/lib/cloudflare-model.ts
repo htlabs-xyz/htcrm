@@ -3,7 +3,11 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { LanguageModelV4 } from "@ai-sdk/provider";
 import type { GatewayModel } from "@crm/ai-gateway";
-import { gatewayAccountUrl } from "@crm/ai-gateway/config";
+import {
+	gatewayAccountUrl,
+	gatewayBaseUrl,
+	gatewayId,
+} from "@crm/ai-gateway/config";
 import { wrapLanguageModel } from "ai";
 
 export function unavailableModel(
@@ -29,18 +33,37 @@ export function cloudflareModel(
 	accountId: string,
 	apiToken: string,
 	request: typeof fetch = fetch,
+	gatewayName = gatewayId(),
 ): LanguageModelV4 {
-	const baseURL = `${gatewayAccountUrl(accountId)}/ai/v1`;
-	const headers = { "cf-aig-skip-cache": "true" };
+	const nativeBase = gatewayBaseUrl(accountId, gatewayName);
+	const deepseek = model.id.startsWith("deepseek/");
+	const modelId = deepseek ? model.id.slice("deepseek/".length) : model.id;
+	const baseURL = deepseek
+		? `${nativeBase}/deepseek`
+		: `${gatewayAccountUrl(accountId)}/ai/v1`;
 	const guardedFetch: typeof fetch = async (input, init) => {
-		const response = await request(input, { ...init, redirect: "error" });
+		const headers = new Headers(init?.headers);
+		headers.set("cf-aig-skip-cache", "true");
+		headers.set("cf-aig-no-wholesale", "true");
+		if (deepseek) {
+			headers.delete("authorization");
+			headers.delete("x-api-key");
+			headers.set("cf-aig-authorization", `Bearer ${apiToken}`);
+		} else {
+			headers.set("cf-aig-gateway-id", gatewayName ?? "");
+		}
+		const response = await request(input, {
+			...init,
+			headers,
+			redirect: "error",
+		});
 		if (!response.ok) {
 			await response.body?.cancel();
 			const message =
 				response.status === 401 || response.status === 403
-					? "Cloudflare refused the key. Replace it in Settings with a token that has Workers AI Read."
+					? "Cloudflare refused the key. Check AI Gateway Read and Run, Workers AI Read, and the stored provider key."
 					: response.status === 402
-						? "Cloudflare AI credits are unavailable. Check Unified Billing in Cloudflare."
+						? "AI provider credits are unavailable. Check the balance for your BYOK provider key."
 						: `Cloudflare could not run the selected model (HTTP ${response.status}). Check the model and account in Cloudflare.`;
 			return Response.json(
 				{ error: { message, type: "cloudflare_gateway_error" } },
@@ -54,23 +77,20 @@ export function cloudflareModel(
 			? createAnthropic({
 					baseURL,
 					authToken: apiToken,
-					headers,
 					fetch: guardedFetch,
-				})(model.id)
+				})(modelId)
 			: model.requestFormat === "responses"
 				? createOpenAI({
 						baseURL,
 						apiKey: apiToken,
-						headers,
 						fetch: guardedFetch,
-					}).responses(model.id)
+					}).responses(modelId)
 				: createOpenAICompatible({
 						name: "cloudflare",
 						baseURL,
 						apiKey: apiToken,
-						headers,
 						fetch: guardedFetch,
-					}).chatModel(model.id);
+					}).chatModel(modelId);
 	return wrapLanguageModel({
 		model: providerModel,
 		middleware: {

@@ -1,5 +1,5 @@
 import { fetchGatewayCatalog, GatewayCatalogError } from "@crm/ai-gateway";
-import { gatewayAccountId } from "@crm/ai-gateway/config";
+import { gatewayAccountId, gatewayId } from "@crm/ai-gateway/config";
 import type { Db } from "@crm/db";
 import { readGatewayKey, writeGatewayKey } from "@crm/db/ai-gateway-key";
 import {
@@ -96,7 +96,8 @@ export class SettingsService {
 	}
 
 	async aiGatewayKey(): Promise<AiGatewayKeySettings> {
-		const accountConfigured = gatewayAccountId() !== null;
+		const accountConfigured =
+			gatewayAccountId() !== null && gatewayId() !== null;
 		try {
 			const key = await readGatewayKey(this.db);
 			return {
@@ -118,9 +119,9 @@ export class SettingsService {
 	async setAiGatewayKey(apiKey: string | null): Promise<AiGatewayKeySettings> {
 		if (apiKey !== null) {
 			const accountId = gatewayAccountId();
-			if (!accountId)
+			if (!accountId || !gatewayId())
 				throw new BadRequestException(
-					"Configure CLOUDFLARE_ACCOUNT_ID on the CRM server first.",
+					"Configure CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_GATEWAY_ID on the CRM server first.",
 				);
 			try {
 				await fetchGatewayCatalog(accountId, apiKey);

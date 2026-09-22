@@ -15,6 +15,7 @@ import { SETTINGS_ID } from "@crm/db/settings";
 import { cloudflareSessionModel } from "../agent/lib/cloudflare-session-model";
 
 const originalAccount = env.CLOUDFLARE_ACCOUNT_ID;
+const originalGateway = env.CLOUDFLARE_GATEWAY_ID;
 let saved: Prisma.AppSettingUncheckedCreateInput | null;
 let network: ReturnType<typeof spyOn<typeof globalThis, "fetch">>;
 const first = {
@@ -30,6 +31,7 @@ const first = {
 beforeAll(async () => {
 	saved = await db.appSetting.findUnique({ where: { id: SETTINGS_ID } });
 	env.CLOUDFLARE_ACCOUNT_ID = "0".repeat(32);
+	env.CLOUDFLARE_GATEWAY_ID = "gateway";
 });
 afterEach(() => network?.mockRestore());
 afterAll(async () => {
@@ -41,6 +43,8 @@ afterAll(async () => {
 	else await db.appSetting.deleteMany({ where: { id: SETTINGS_ID } });
 	if (originalAccount === undefined) delete env.CLOUDFLARE_ACCOUNT_ID;
 	else env.CLOUDFLARE_ACCOUNT_ID = originalAccount;
+	if (originalGateway === undefined) delete env.CLOUDFLARE_GATEWAY_ID;
+	else env.CLOUDFLARE_GATEWAY_ID = originalGateway;
 });
 
 function session(savedModel: GatewayModel | null = null) {
@@ -56,10 +60,12 @@ function session(savedModel: GatewayModel | null = null) {
 describe("Cloudflare session model", () => {
 	it("pins the model across settings changes and restores without persisting credentials", async () => {
 		await writeGatewayKey(db, "test-original-cloudflare-token");
-		network = spyOn(globalThis, "fetch").mockImplementation(async () =>
+		network = spyOn(globalThis, "fetch").mockImplementation(async (input) =>
 			Response.json({
 				success: true,
-				result: [first],
+				result: String(input).includes("provider_configs")
+					? [{ provider_slug: "google-ai-studio", alias: "default" }]
+					: [first],
 				result_info: { total_count: 1 },
 			}),
 		);
@@ -78,7 +84,7 @@ describe("Cloudflare session model", () => {
 			throw new Error("An open session must not reread the model choice");
 		}, restored);
 		expect(resumed.model.modelId).toBe(first.model_id);
-		expect(network).toHaveBeenCalledTimes(1);
+		expect(network).toHaveBeenCalledTimes(2);
 		await writeGatewayKey(db, null);
 		expect(
 			(await cloudflareSessionModel(async () => null, restored)).model.modelId,
@@ -86,10 +92,12 @@ describe("Cloudflare session model", () => {
 	});
 	it("uses the immutable team-agent selection and fails closed for a Vercel-only model", async () => {
 		await writeGatewayKey(db, "test-team-cloudflare-token");
-		network = spyOn(globalThis, "fetch").mockImplementation(async () =>
+		network = spyOn(globalThis, "fetch").mockImplementation(async (input) =>
 			Response.json({
 				success: true,
-				result: [first],
+				result: String(input).includes("provider_configs")
+					? [{ provider_slug: "google-ai-studio", alias: "default" }]
+					: [first],
 				result_info: { total_count: 1 },
 			}),
 		);

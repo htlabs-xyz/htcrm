@@ -3,7 +3,7 @@ import {
 	GatewayCatalogError,
 	type GatewayModel,
 } from "@crm/ai-gateway";
-import { gatewayAccountId } from "@crm/ai-gateway/config";
+import { gatewayAccountId, gatewayId } from "@crm/ai-gateway/config";
 import { db } from "@crm/db";
 import { readGatewayKey } from "@crm/db/ai-gateway-key";
 import { defineState } from "eve/context";
@@ -21,10 +21,10 @@ export async function cloudflareSessionModel(
 ) {
 	try {
 		const accountId = gatewayAccountId();
-		if (!accountId)
+		if (!accountId || !gatewayId())
 			return {
 				model: unavailableModel(
-					"Configure CLOUDFLARE_ACCOUNT_ID on the CRM server to enable AI.",
+					"Configure CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_GATEWAY_ID on the CRM server to enable AI.",
 				),
 			};
 		const apiToken = await readGatewayKey(db);

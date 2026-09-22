@@ -15,8 +15,45 @@ const lookup = tool({
 });
 
 describe("Cloudflare model transport", () => {
+	it("uses the stored DeepSeek key without forwarding a provider credential or allowing wholesale billing", async () => {
+		let checked = false;
+		const request = Object.assign(
+			async (input: string | URL | Request, init?: RequestInit) => {
+				expect(String(input)).toBe(
+					`https://gateway.ai.cloudflare.com/v1/${accountId}/gateway/deepseek/chat/completions`,
+				);
+				const headers = new Headers(init?.headers);
+				expect(headers.get("authorization")).toBeNull();
+				expect(headers.get("x-api-key")).toBeNull();
+				expect(headers.get("cf-aig-authorization")).toBe(`Bearer ${apiToken}`);
+				expect(headers.get("cf-aig-no-wholesale")).toBe("true");
+				expect(JSON.parse(String(init?.body)).model).toBe("deepseek-flash");
+				checked = true;
+				return Response.json(
+					{ error: { message: "Provider rejected request" } },
+					{ status: 400 },
+				);
+			},
+			{ preconnect: fetch.preconnect },
+		);
+		await expect(
+			generateText({
+				model: cloudflareModel(
+					{ id: "deepseek/deepseek-flash", requestFormat: "chat-completions" },
+					accountId,
+					apiToken,
+					request,
+					"gateway",
+				),
+				prompt: "Hello",
+				maxRetries: 0,
+			}),
+		).rejects.toThrow("HTTP 400");
+		expect(checked).toBe(true);
+	});
 	it.each([
 		["chat-completions", "google/gemini-2.5-flash", "chat/completions"],
+		["chat-completions", "deepseek/deepseek-flash", "chat/completions"],
 		["responses", "openai/gpt-4.1", "responses"],
 		["anthropic-messages", "anthropic/claude-sonnet-4.6", "messages"],
 	] as const)(
@@ -25,14 +62,27 @@ describe("Cloudflare model transport", () => {
 			const request: typeof fetch = Object.assign(
 				async (input: string | URL | Request, init?: RequestInit) => {
 					expect(String(input)).toBe(
-						`https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/v1/${path}`,
+						id.startsWith("deepseek/")
+							? `https://gateway.ai.cloudflare.com/v1/${accountId}/gateway/deepseek/${path}`
+							: `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/v1/${path}`,
 					);
 					const headers = new Headers(init?.headers);
-					expect(headers.get("authorization")).toBe(`Bearer ${apiToken}`);
+					expect(
+						headers.get(
+							id.startsWith("deepseek/")
+								? "cf-aig-authorization"
+								: "authorization",
+						),
+					).toBe(`Bearer ${apiToken}`);
 					expect(headers.get("cf-aig-skip-cache")).toBe("true");
+					if (!id.startsWith("deepseek/"))
+						expect(headers.get("cf-aig-gateway-id")).toBe("gateway");
+					expect(headers.get("cf-aig-no-wholesale")).toBe("true");
 					expect(init?.redirect).toBe("error");
 					const body = JSON.parse(String(init?.body));
-					expect(body.model).toBe(id);
+					expect(body.model).toBe(
+						id.startsWith("deepseek/") ? "deepseek-flash" : id,
+					);
 					if (requestFormat === "responses") {
 						expect(body.store).toBe(false);
 						expect(body.max_output_tokens).toBe(8192);
@@ -113,6 +163,7 @@ describe("Cloudflare model transport", () => {
 					accountId,
 					apiToken,
 					request,
+					"gateway",
 				),
 				prompt: "Look up record-1",
 				tools: { lookup },
@@ -123,67 +174,71 @@ describe("Cloudflare model transport", () => {
 		},
 	);
 
-	it("streams a tool call without dropping argument fragments", async () => {
-		const chunks = [
-			{
-				choices: [
-					{
-						index: 0,
-						delta: {
-							role: "assistant",
-							tool_calls: [
-								{
-									index: 0,
-									id: "call_1",
-									type: "function",
-									function: { name: "lookup", arguments: '{"id":' },
-								},
-							],
+	it.each(["google/gemini-2.5-flash", "deepseek/deepseek-flash"])(
+		"streams %s tool calls without dropping argument fragments",
+		async (id) => {
+			const chunks = [
+				{
+					choices: [
+						{
+							index: 0,
+							delta: {
+								role: "assistant",
+								tool_calls: [
+									{
+										index: 0,
+										id: "call_1",
+										type: "function",
+										function: { name: "lookup", arguments: '{"id":' },
+									},
+								],
+							},
+							finish_reason: null,
 						},
-						finish_reason: null,
-					},
-				],
-			},
-			{
-				choices: [
-					{
-						index: 0,
-						delta: {
-							tool_calls: [
-								{ index: 0, function: { arguments: '"record-1"}' } },
-							],
+					],
+				},
+				{
+					choices: [
+						{
+							index: 0,
+							delta: {
+								tool_calls: [
+									{ index: 0, function: { arguments: '"record-1"}' } },
+								],
+							},
+							finish_reason: null,
 						},
-						finish_reason: null,
-					},
-				],
-			},
-			{
-				choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }],
-				usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
-			},
-		];
-		const request = Object.assign(
-			async () =>
-				new Response(
-					`${chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join("")}data: [DONE]\n\n`,
-					{ headers: { "content-type": "text/event-stream" } },
+					],
+				},
+				{
+					choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }],
+					usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+				},
+			];
+			const request = Object.assign(
+				async () =>
+					new Response(
+						`${chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join("")}data: [DONE]\n\n`,
+						{ headers: { "content-type": "text/event-stream" } },
+					),
+				{ preconnect: fetch.preconnect },
+			);
+			const result = streamText({
+				model: cloudflareModel(
+					{ id, requestFormat: "chat-completions" },
+					accountId,
+					apiToken,
+					request,
+					"gateway",
 				),
-			{ preconnect: fetch.preconnect },
-		);
-		const result = streamText({
-			model: cloudflareModel(
-				{ id: "google/gemini-2.5-flash", requestFormat: "chat-completions" },
-				accountId,
-				apiToken,
-				request,
-			),
-			prompt: "Look up record-1",
-			tools: { lookup },
-			maxRetries: 0,
-		});
-		await result.consumeStream();
-		expect((await result.toolCalls)[0]?.input).toEqual({ id: "record-1" });
-	});
+				prompt: "Look up record-1",
+				tools: { lookup },
+				maxRetries: 0,
+			});
+			await result.consumeStream();
+			expect((await result.toolCalls)[0]?.input).toEqual({ id: "record-1" });
+		},
+	);
 
 	it("fails closed without setup and redacts provider error bodies", async () => {
 		await expect(
@@ -207,6 +262,7 @@ describe("Cloudflare model transport", () => {
 					accountId,
 					apiToken,
 					request,
+					"gateway",
 				),
 				prompt: "Hello",
 				maxRetries: 0,

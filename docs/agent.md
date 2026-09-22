@@ -13,16 +13,22 @@ are in `docs/setup.md`.
 
 Models run through Cloudflare AI Gateway. Settings → General stores the token and model choice.
 
-- `@crm/ai-gateway` reads Cloudflare's paginated third-party catalog. It requires a supported request format and known context window.
-- `lib/cloudflare-model.ts` selects the catalog's chat completions, Responses, or Anthropic Messages protocol.
+- `@crm/ai-gateway` lists providers with a stored key under alias `default` in the configured gateway. Provider configuration reads require AI Gateway Read.
+- DeepSeek models come from the provider-native `/deepseek/models` endpoint, with documented Flash and Pro limits in `byok-models.ts`.
+- Other providers use Cloudflare's paginated catalog, filtered to configured BYOK providers and supported request formats.
+- `lib/cloudflare-model.ts` calls DeepSeek through the native gateway endpoint with `cf-aig-authorization` and no provider credential.
+- Other models retain chat completions, Responses, or Anthropic Messages through Cloudflare REST with the explicit gateway ID.
+- Every request sets `cf-aig-no-wholesale: true`. Missing provider keys never fall back to Cloudflare-managed billing.
 - `lib/cloudflare-session-model.ts` pins serializable model metadata in Eve session state at the first model step.
 - Every step creates a provider model with the current token. Tokens never enter durable session state.
 - All three agents use this path. Team-agent runs retain their immutable version's model choice.
 - Missing configuration returns a clear error before inference. No resolver failure falls back to Vercel.
 - `DEFAULT_AGENT_MODEL` remains legacy database compatibility metadata. It does not select a new Cloudflare model.
 - Existing Vercel-only selections require a new selection. Rebuild deployed team agents that reference unavailable models.
-- Catalog prices are converted from per-million to per-token units. Tiered or unknown prices stay absent.
-- The key-only catalog covers third-party REST models. Workers AI models require separate gateway configuration and are excluded.
+- BYOK prices stay absent: Cloudflare catalog prices do not establish the provider account's charges. DeepSeek pricing also varies by time.
+- DeepSeek Flash and Pro use 1,048,576 context tokens and 393,216 maximum output tokens, per [DeepSeek documentation](https://api-docs.deepseek.com/quick_start/pricing/).
+- The catalog excludes Workers AI and provider models with unknown context or unsupported protocols. Adding a default provider key appears after the catalog cache expires (30 minutes).
+- The catalog cache separates accounts, gateways, and token fingerprints.
 
 ## Pictures are copied, never linked
 

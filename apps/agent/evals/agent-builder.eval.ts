@@ -1,4 +1,4 @@
-import { gatewayAccountId } from "@crm/ai-gateway/config";
+import { gatewayAccountId, gatewayId } from "@crm/ai-gateway/config";
 import { db } from "@crm/db";
 import { readGatewayKey } from "@crm/db/ai-gateway-key";
 import { agentManifest } from "@crm/validation/agent-manifest";
@@ -16,6 +16,7 @@ export default defineEval({
 			!process.env.DATABASE_URL ||
 			!secret ||
 			!gatewayAccountId() ||
+			!gatewayId() ||
 			!(await readGatewayKey(db))
 		) {
 			t.skip(

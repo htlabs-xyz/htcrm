@@ -127,6 +127,7 @@ single place that knows what is set.
 | `GITHUB_TOKEN` | Raises the GitHub rate limit from 60/hour |
 | `BLOB_READ_WRITE_TOKEN` | Mirrors logos and photos into Blob |
 | `CLOUDFLARE_ACCOUNT_ID` | Account used by the Cloudflare model catalog and inference |
+| `CLOUDFLARE_GATEWAY_ID` | Authenticated gateway containing BYOK provider keys with alias `default` |
 | `AGENT_BRIDGE_SECRET` | The rep-facing Agent panel — see `agent.md` |
 
 `BLOB_READ_WRITE_TOKEN` is also in `env.validation.ts` and `apps/api/turbo.json`
@@ -135,10 +136,14 @@ excluded — recognising our URL for the image optimizer needs no token.
 
 ### Cloudflare AI key
 
-Set `CLOUDFLARE_ACCOUNT_ID` on the server. Enter a Cloudflare API token in Settings → General, then choose a model.
-The token needs **Account → Workers AI → Read** for that account. An AI Gateway-only token is insufficient.
+Set `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_GATEWAY_ID` on the server. Enter a Cloudflare API token in Settings → General, then choose a model.
+The token needs **Account → AI Gateway → Read**, **Account → AI Gateway → Run**, and **Account → Workers AI → Read**.
+Read discovers stored provider configurations, Run calls the native gateway, and Workers AI Read reads the other providers' catalog and REST endpoints.
+The UI needs only the token and model. Gateway configuration stays on the server.
 The app starts without a token. AI calls remain unavailable until a token and supported model are selected.
-Third-party requests use Cloudflare's default gateway and Unified Billing. Saving a token does not purchase credits.
+Store provider keys in the configured gateway under alias `default`, following [Cloudflare BYOK setup](https://developers.cloudflare.com/ai-gateway/configuration/bring-your-own-keys/).
+Providers bill model usage. CRM disables fallback to Cloudflare-managed billing with `cf-aig-no-wholesale: true`.
+DeepSeek Flash and Pro use native provider endpoints; other supported providers use the Cloudflare REST API with the explicit gateway.
 
 `AppSetting.cloudflareApiToken` stores AES-256-GCM ciphertext. Encryption derives from `BETTER_AUTH_SECRET`.
 Rotating that secret requires re-entering the token. API responses return only status and the last four characters.

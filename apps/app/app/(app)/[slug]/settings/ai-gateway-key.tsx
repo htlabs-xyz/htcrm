@@ -78,10 +78,10 @@ export function AiGatewayKey() {
 							/>
 							<FieldDescription>
 								{!accountConfigured
-									? "The server needs a Cloudflare account configured before you can save a token."
+									? "The server needs a Cloudflare account and gateway configured before you can save a token."
 									: needsReplacement
 										? "The saved token could not be opened. Enter it again."
-										: "Use a token with Workers AI Read. Model usage is billed through your Cloudflare account. Your saved token stays hidden."}
+										: "Use a token with AI Gateway Read and Run, plus Workers AI Read. Provider keys stay in Cloudflare; usage is billed by your provider. Your saved token stays hidden."}
 							</FieldDescription>
 						</Field>
 						<Field orientation="horizontal">

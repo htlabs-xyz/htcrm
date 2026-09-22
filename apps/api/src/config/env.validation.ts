@@ -129,6 +129,10 @@ export class EnvironmentVariables {
 
 	@IsOptional()
 	@IsString()
+	CLOUDFLARE_GATEWAY_ID?: string;
+
+	@IsOptional()
+	@IsString()
 	CRM_TELEMETRY_DISABLED?: string;
 }
 

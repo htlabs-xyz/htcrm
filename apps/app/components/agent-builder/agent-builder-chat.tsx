@@ -1202,9 +1202,9 @@ function BuilderFailureCard({
 		failure.kind === "rate-limit"
 			? "Cloudflare AI Gateway rate-limited this model before it could start. Try again in a moment or check the account limits in Cloudflare."
 			: failure.kind === "restricted"
-				? "This model requires paid AI Gateway credits. Check Unified Billing in Cloudflare, then try again."
+				? "This model is restricted by your provider. Check access for the provider key stored in Cloudflare."
 				: failure.kind === "credits"
-					? "Cloudflare AI Gateway has no available credits. Check Unified Billing in Cloudflare, then try again."
+					? "Your AI provider has no available credits. Check the balance for the provider key stored in Cloudflare."
 					: failure.kind === "configuration"
 						? "Check Cloudflare AI in Settings → General: enter a valid key and choose a supported model. Rebuild deployed agents that use an unavailable model."
 						: "The builder could not finish this request. Try again.";

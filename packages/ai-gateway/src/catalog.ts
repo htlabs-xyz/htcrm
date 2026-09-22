@@ -1,5 +1,11 @@
 import { z } from "zod";
-import { AI_GATEWAY, gatewayAccountUrl } from "./config";
+import { DEEPSEEK_MODELS } from "./byok-models";
+import {
+	AI_GATEWAY,
+	gatewayAccountUrl,
+	gatewayBaseUrl,
+	gatewayId,
+} from "./config";
 
 export const requestFormat = z.enum([
 	"chat-completions",
@@ -37,11 +43,17 @@ const catalogPage = z.object({
 	result_info: z.object({ total_count: z.number().int().nonnegative() }),
 });
 
+const providerConfig = z.object({
+	provider_slug: z.string(),
+	alias: z.string(),
+});
+const nativeModels = z.object({ data: z.array(z.object({ id: z.string() })) });
+
 export class GatewayCatalogError extends Error {
 	constructor(readonly status: number) {
 		super(
 			status === 401 || status === 403
-				? "Cloudflare refused this key. Use a token with Workers AI Read for this account."
+				? "Cloudflare refused this key. Use a token with Workers AI Read, AI Gateway Read, and AI Gateway Run for this account. Check the stored provider key too."
 				: "Could not load Cloudflare models. Check the account, token permissions, and connection, then try again.",
 		);
 	}
@@ -73,49 +85,110 @@ export function parseCatalogModel(
 	};
 }
 
+async function readGatewayJson(
+	url: URL | string,
+	apiToken: string,
+	request: typeof fetch,
+	native = false,
+) {
+	let response: Response;
+	try {
+		response = await request(url, {
+			headers: {
+				[native ? "cf-aig-authorization" : "authorization"]:
+					`Bearer ${apiToken}`,
+				"cf-aig-no-wholesale": "true",
+				"cf-aig-skip-cache": "true",
+				accept: "application/json",
+			},
+			signal: AbortSignal.timeout(AI_GATEWAY.catalogTimeoutMs),
+			redirect: "error",
+		});
+	} catch {
+		throw new GatewayCatalogError(0);
+	}
+	if (!response.ok) {
+		await response.body?.cancel();
+		throw new GatewayCatalogError(response.status);
+	}
+	return response.json().catch(() => null);
+}
+
+async function readPages(url: URL, apiToken: string, request: typeof fetch) {
+	const entries: z.infer<typeof catalogPage>["result"] = [];
+	let seen = 0;
+	for (let page = 1; page <= AI_GATEWAY.catalogMaxPages; page++) {
+		url.searchParams.set("per_page", String(AI_GATEWAY.catalogPageSize));
+		url.searchParams.set("page", String(page));
+		const parsed = catalogPage.safeParse(
+			await readGatewayJson(url, apiToken, request),
+		);
+		if (!parsed.success) throw new GatewayCatalogError(0);
+		entries.push(...parsed.data.result);
+		seen += parsed.data.result.length;
+		if (seen >= parsed.data.result_info.total_count) return entries;
+		if (!parsed.data.result.length) throw new GatewayCatalogError(0);
+	}
+	throw new GatewayCatalogError(0);
+}
+
 export async function fetchGatewayCatalog(
 	accountId: string,
 	apiToken: string,
 	request: typeof fetch = fetch,
+	gatewayName = gatewayId(),
 ): Promise<GatewayModel[]> {
+	const nativeBase = gatewayBaseUrl(accountId, gatewayName);
 	const base = gatewayAccountUrl(accountId);
+	const configs = await readPages(
+		new URL(`${base}/ai-gateway/gateways/${gatewayName}/provider_configs`),
+		apiToken,
+		request,
+	);
+	const providers = new Set<string>();
+	for (const value of configs) {
+		const parsed = providerConfig.safeParse(value);
+		if (!parsed.success) throw new GatewayCatalogError(0);
+		if (parsed.data.alias === "default")
+			providers.add(
+				parsed.data.provider_slug === "google-ai-studio"
+					? "google"
+					: parsed.data.provider_slug,
+			);
+	}
+	if (!providers.size) return [];
 	const models = new Map<string, GatewayModel>();
-	let seen = 0;
-	for (let page = 1; page <= AI_GATEWAY.catalogMaxPages; page++) {
+	if ([...providers].some((provider) => provider !== "deepseek")) {
 		const url = new URL(`${base}/ai/catalog/models`);
 		url.searchParams.set("task", "Text Generation");
-		url.searchParams.set("per_page", String(AI_GATEWAY.catalogPageSize));
-		url.searchParams.set("page", String(page));
-		let response: Response;
-		try {
-			response = await request(url, {
-				headers: {
-					authorization: `Bearer ${apiToken}`,
-					accept: "application/json",
-				},
-				signal: AbortSignal.timeout(AI_GATEWAY.catalogTimeoutMs),
-				redirect: "error",
-			});
-		} catch {
-			throw new GatewayCatalogError(0);
+		for (const entry of await readPages(url, apiToken, request)) {
+			const model = parseCatalogModel(entry);
+			if (
+				model &&
+				model.provider !== "deepseek" &&
+				providers.has(model.provider)
+			)
+				models.set(model.id, { ...model, pricing: null });
 		}
-		if (!response.ok) throw new GatewayCatalogError(response.status);
-		const parsed = catalogPage.safeParse(
-			await response.json().catch(() => null),
+	}
+	if (providers.has("deepseek")) {
+		const parsed = nativeModels.safeParse(
+			await readGatewayJson(
+				`${nativeBase}/deepseek/models`,
+				apiToken,
+				request,
+				true,
+			),
 		);
 		if (!parsed.success) throw new GatewayCatalogError(0);
-		for (const entry of parsed.data.result) {
-			const model = parseCatalogModel(entry);
-			if (model) models.set(model.id, model);
-		}
-		seen += parsed.data.result.length;
-		if (seen >= parsed.data.result_info.total_count) {
-			return [...models.values()].sort(
-				(a, b) =>
-					a.provider.localeCompare(b.provider) || a.name.localeCompare(b.name),
-			);
-		}
-		if (!parsed.data.result.length) throw new GatewayCatalogError(0);
+		const available = new Set(
+			parsed.data.data.map((model) => `deepseek/${model.id}`),
+		);
+		for (const model of DEEPSEEK_MODELS)
+			if (available.has(model.id)) models.set(model.id, model);
 	}
-	throw new GatewayCatalogError(0);
+	return [...models.values()].sort(
+		(a, b) =>
+			a.provider.localeCompare(b.provider) || a.name.localeCompare(b.name),
+	);
 }
