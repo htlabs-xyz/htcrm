@@ -29,6 +29,7 @@ RUN DATABASE_URL=postgresql://build:build@127.0.0.1:5432/build \
 
 FROM production-dependencies AS agent
 ENV NODE_ENV=production
+ENV HOST=0.0.0.0 PORT=2000
 COPY --from=source --chown=node:node /app/packages/ ./packages/
 COPY --from=source --chown=node:node /app/apps/agent/agent/ ./apps/agent/agent/
 COPY --from=source --chown=node:node /app/apps/agent/tsconfig.json ./apps/agent/
@@ -41,4 +42,4 @@ USER node
 RUN mkdir -p /app/apps/agent/.eve/.workflow-data /app/apps/agent/.eve/sandbox-cache
 WORKDIR /app/apps/agent
 EXPOSE 2000
-CMD ["bun", "run", "eve", "start", "--host", "0.0.0.0", "--port", "2000"]
+CMD ["node", ".output/server/index.mjs"]

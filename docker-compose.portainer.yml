@@ -1,5 +1,3 @@
-name: htcrm
-
 x-service: &service
   restart: unless-stopped
   init: true
@@ -47,10 +45,7 @@ services:
       retries: 20
 
   migrate:
-    build:
-      context: .
-      dockerfile: apps/api/Dockerfile
-      target: migrate
+    image: ${IMAGE_PREFIX:-ghcr.io/htlabs-xyz/htcrm}-migrate:${IMAGE_TAG:-latest}
     environment:
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?Set a URL-safe POSTGRES_PASSWORD}@postgres:5432/crm?schema=public
     depends_on:
@@ -60,10 +55,7 @@ services:
 
   api:
     <<: *service
-    build:
-      context: .
-      dockerfile: apps/api/Dockerfile
-      target: api
+    image: ${IMAGE_PREFIX:-ghcr.io/htlabs-xyz/htcrm}-api:${IMAGE_TAG:-latest}
     environment:
       <<: *app-environment
       PORT: "3001"
@@ -83,10 +75,7 @@ services:
 
   agent:
     <<: *service
-    build:
-      context: .
-      dockerfile: apps/agent/Dockerfile
-      target: agent
+    image: ${IMAGE_PREFIX:-ghcr.io/htlabs-xyz/htcrm}-agent:${IMAGE_TAG:-latest}
     command: [node, .output/server/index.mjs]
     environment:
       <<: *app-environment
@@ -112,10 +101,7 @@ services:
 
   web:
     <<: *service
-    build:
-      context: .
-      dockerfile: apps/app/Dockerfile
-      target: web
+    image: ${IMAGE_PREFIX:-ghcr.io/htlabs-xyz/htcrm}-web:${IMAGE_TAG:-latest}
     environment:
       <<: *app-environment
       IS_MARKETING: ${IS_MARKETING:-false}
@@ -135,10 +121,7 @@ services:
 
   scheduler:
     <<: *service
-    build:
-      context: .
-      dockerfile: docker/scheduler.Dockerfile
-      target: scheduler
+    image: ${IMAGE_PREFIX:-ghcr.io/htlabs-xyz/htcrm}-scheduler:${IMAGE_TAG:-latest}
     environment:
       CRON_SECRET: ${CRON_SECRET:?Set CRON_SECRET}
     depends_on:

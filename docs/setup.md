@@ -40,6 +40,11 @@ The command builds five separate images and starts the complete stack:
 - `web` serves Next.js on port 3000 after API and agent health checks pass.
 - `scheduler` calls the API jobs defined in `apps/api/vercel.json`, using UTC and `CRON_SECRET`.
 
+The agent starts Node directly on `.output/server/index.mjs`, with `HOST=0.0.0.0` and `PORT=2000`.
+This runs the built channels, tools, and schedules without the Eve CLI's startup sandbox prewarm.
+In Eve 0.29.4, that prewarm can rebundle authored source before opening the HTTP server and exhaust a small host's memory.
+Both production Compose files override the command, so already-published images also use the built server.
+
 The development `docker-compose.yml` remains database-only. Its database volume is separate from the production stack.
 Compose constructs the container database URL from `POSTGRES_PASSWORD`. The development `DATABASE_URL` does not override it.
 
@@ -99,6 +104,80 @@ gh workflow run docker-images.yml --repo htlabs-xyz/htcrm --ref release
 
 If another workflow updates refs using `GITHUB_TOKEN`, its push does not trigger this workflow; run it manually from Actions.
 See [GitHub's workflow trigger rules](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow).
+
+### Portainer
+
+Use a Docker Standalone environment on a Linux `amd64` host.
+The [Portainer stack](../docker-compose.portainer.yml) pulls images without a source checkout or local builds.
+It preserves the production stack's health checks, migration ordering, private ports, schedules, and three persistent volumes.
+
+1. Open **Stacks → Add stack**. Use the stack name `crm`. For an existing deployment, keep its exact stack name.
+2. Paste `docker-compose.portainer.yml` into **Web editor**, or select it through **Upload**.
+3. Under **Environment variables**, enter the values below.
+4. Replace the example domain and email. Generate each of the four blank secrets separately with `openssl rand -hex 32`.
+5. Set one complete Google or Microsoft client pair for sign-in. Set `AI_GATEWAY_API_KEY` for model calls.
+6. Select **Deploy the stack**.
+
+See [Portainer's stack creation instructions](https://docs.portainer.io/user/docker/stacks/add) for its environment import controls.
+This example pins all five application images to the same published commit:
+
+```dotenv
+IMAGE_PREFIX=ghcr.io/htlabs-xyz/htcrm
+IMAGE_TAG=sha-b62cd00c58e9a2517e5ecb0a439c0befe4ce1a54
+APP_URL=https://crm.example.com
+HTTP_BIND=0.0.0.0
+HTTP_PORT=33000
+ALLOWED_SIGN_IN=you@example.com
+POSTGRES_PASSWORD=
+BETTER_AUTH_SECRET=
+AGENT_BRIDGE_SECRET=
+CRON_SECRET=
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+MICROSOFT_CLIENT_ID=
+MICROSOFT_CLIENT_SECRET=
+MICROSOFT_TENANT_ID=common
+AI_GATEWAY_API_KEY=
+```
+
+The `htlabs-xyz/htcrm-*` packages are public. They require no registry credentials.
+Variables omitted from this smaller template retain their defaults. The root environment template documents all variables.
+The stack reads variables from Portainer's environment fields; it requires no `env_file` or host bind mounts.
+
+Point your HTTPS proxy to the Docker host's published port. The example above uses `33000`;
+Compose defaults to `3000` if `HTTP_PORT` is omitted. Nginx Proxy Manager using host networking
+already listens on `3000`, so use a different free port for CRM in that setup.
+Use your browser-facing HTTPS origin for `APP_URL`. Omit `API_URL` to use that same origin.
+Register `<APP_URL>/api/auth/callback/google` or `<APP_URL>/api/auth/callback/microsoft` with the selected provider.
+The stack publishes only the web port. The agent listens internally on `2000`, and the API listens internally on `3001`.
+
+After deployment, `migrate` exits with code `0`; PostgreSQL, API, agent, and web report healthy; scheduler remains running.
+Use Portainer's container logs to investigate a failed migration or health check.
+Keep the stack name and secrets unchanged during upgrades to retain the same database and agent volumes.
+Back up PostgreSQL before upgrades. Change `IMAGE_TAG` to another fully published commit tag, then update the stack.
+
+#### Recovering failed startup
+
+`x-app-environment` is a shared YAML block merged into web, API, and agent environments. It is not a container.
+Portainer must supply every required `${VARIABLE:?message}` value before Compose can create the stack.
+For a short `BETTER_AUTH_SECRET`, replace the value in the stack environment with a separately generated
+random secret of at least 32 characters, then update the stack to recreate the application containers.
+
+For Prisma `P1000`, compare the application's database URL with the PostgreSQL container's configured password
+without printing either value. PostgreSQL only applies `POSTGRES_PASSWORD` when initializing an empty data directory;
+changing the environment does not change the role password in an existing volume.
+Restore the original password in the stack environment, or deliberately synchronize the existing role password
+with the intended stack value through a local database administration connection. Preserve `postgres-data`.
+See the [PostgreSQL image initialization rules](https://github.com/docker-library/docs/blob/master/postgres/README.md#environment-variables).
+
+Verify password authentication over the Docker network with host `postgres`. A Unix socket or `127.0.0.1`
+can use local trust authentication and does not prove that the application password works.
+Check that `migrate` exits `0` and `/health` succeeds before considering the database recovered.
+
+If stack creation fails, Portainer can leave Compose containers and volumes without a managed stack record.
+Inspect containers with the exact `com.docker.compose.project` label before creating anything again.
+Recover using the same stack name, image tags, environment, and named volumes. Fix the reported startup cause
+before retrying; a new stack name would select different volumes.
 
 ### URLs and optional services
 
