@@ -5,7 +5,12 @@ import { SETTINGS_ID, writeReportingCurrency } from "@crm/db/settings";
 import type { AgentTriggerService } from "../src/agent/agent-trigger.service";
 import { ActivityStampService } from "../src/crm/activity-stamp.service";
 import { ConversionService } from "../src/currency/conversion.service";
+import {
+	setManualRateInput,
+	setReportingCurrencyInput,
+} from "../src/currency/currency.contracts";
 import { DashboardService } from "../src/dashboard/dashboard.service";
+import { dealCreateInput } from "../src/deals/deals.contracts";
 import { DealsService } from "../src/deals/deals.service";
 import { FieldsService } from "../src/fields/fields.service";
 import { withDiscardedCrmEvents } from "./agent-trigger.stub";
@@ -57,8 +62,8 @@ async function rate(quote: string, value: string, source: RateSource) {
 async function clearRates() {
 	await db.exchangeRate.deleteMany({
 		where: {
-			baseCurrency: { in: ["USD", "EUR"] },
-			quoteCurrency: { in: ["USD", "EUR", "CHF"] },
+			baseCurrency: { in: ["USD", "EUR", "VND"] },
+			quoteCurrency: { in: ["USD", "EUR", "CHF", "VND"] },
 		},
 	});
 }
@@ -516,5 +521,64 @@ describe("the dashboard only values what it can convert", () => {
 		).toBeNull();
 
 		await db.deal.deleteMany({ where: { id: { in: [open.id, unvalued.id] } } });
+	});
+});
+
+describe("Vietnamese dong", () => {
+	it("accepts a VND deal and converts its amount into the reporting currency", async () => {
+		await writeReportingCurrency(db, "USD");
+		const manualRate = setManualRateInput.parse({
+			currency: "VND",
+			rate: 0.00004,
+		});
+		await rate(manualRate.currency, String(manualRate.rate), RateSource.MANUAL);
+
+		const before = await pipelineCents();
+		const deal = await deals.create(
+			dealCreateInput.parse({
+				name: `Vietnamese contract ${suffix}`,
+				companyId,
+				ownerId: userId,
+				amountCents: 2_500_000_000,
+				currency: "VND",
+			}),
+		);
+
+		const stored = await db.deal.findUniqueOrThrow({ where: { id: deal.id } });
+		expect(stored.currency).toBe("VND");
+		expect(stored.amount?.toNumber()).toBe(25_000_000);
+		expect(stored.baseCurrency).toBe("USD");
+		expect(stored.baseAmount?.toNumber()).toBe(1000);
+		expect(await pipelineCents()).toBe(before + 100_000);
+		await db.deal.delete({ where: { id: deal.id } });
+	});
+
+	it("accepts VND reporting and rounds converted amounts to whole dong", async () => {
+		const setting = setReportingCurrencyInput.parse({ currency: "VND" });
+		await writeReportingCurrency(db, setting.currency);
+		await db.exchangeRate.create({
+			data: {
+				baseCurrency: "VND",
+				quoteCurrency: "USD",
+				rate: "25432.125",
+				asOf: new Date("2026-08-01T00:00:00.000Z"),
+				source: RateSource.MANUAL,
+			},
+		});
+
+		const deal = await deals.create({
+			name: `Dong reporting ${suffix}`,
+			companyId,
+			ownerId: userId,
+			amountCents: 10_000,
+			currency: "USD",
+		});
+		const stored = await db.deal.findUniqueOrThrow({ where: { id: deal.id } });
+		expect(stored.baseCurrency).toBe("VND");
+		expect(stored.baseAmount?.toNumber()).toBe(2_543_213);
+		expect(stored.baseAmount?.decimalPlaces()).toBe(0);
+
+		await db.deal.delete({ where: { id: deal.id } });
+		await writeReportingCurrency(db, "USD");
 	});
 });

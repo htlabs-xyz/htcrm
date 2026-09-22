@@ -62,7 +62,7 @@ describe("normalizeCurrency and isCurrencyCode", () => {
 		}
 	});
 
-	it("offers only the eleven currencies most of the world trades in", () => {
+	it("offers the supported currencies in picker order", () => {
 		expect(CURRENCIES.map((entry) => entry.code)).toEqual([
 			"USD",
 			"EUR",
@@ -75,6 +75,7 @@ describe("normalizeCurrency and isCurrencyCode", () => {
 			"HKD",
 			"SGD",
 			"ZAR",
+			"VND",
 		]);
 	});
 
@@ -94,6 +95,8 @@ describe("normalizeCurrency and isCurrencyCode", () => {
 
 	it("names the currencies it knows", () => {
 		expect(currencyName("jpy")).toBe("Japanese Yen");
+		expect(currencyName(" vnd ")).toBe("Vietnamese Dong");
+		expect(isCurrencyCode(" vnd ")).toBe(true);
 		expect(currencyName("ZZZ")).toBeNull();
 	});
 });
@@ -101,6 +104,7 @@ describe("normalizeCurrency and isCurrencyCode", () => {
 describe("minorUnitsOf", () => {
 	it("knows the currencies that are not two-decimal", () => {
 		expect(minorUnitsOf("JPY")).toBe(0);
+		expect(minorUnitsOf("VND")).toBe(0);
 	});
 
 	it("assumes two for anything else, so an amount still round-trips", () => {
@@ -179,6 +183,10 @@ describe("applyRate", () => {
 	it("rounds to the reporting currency's own decimals, not to two", () => {
 		const yen = applyRate(new Prisma.Decimal(100), rate("150.555"), "JPY");
 		expect(yen.baseAmount.decimalPlaces()).toBe(0);
+
+		const dong = applyRate(new Prisma.Decimal(100), rate("25432.125"), "VND");
+		expect(dong.baseAmount.toNumber()).toBe(2_543_213);
+		expect(dong.baseAmount.decimalPlaces()).toBe(0);
 
 		const dollars = applyRate(new Prisma.Decimal(1000), rate("0.0067"), "USD");
 		expect(dollars.baseAmount.toNumber()).toBe(6.7);
