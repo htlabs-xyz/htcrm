@@ -2,6 +2,13 @@
 
 Setup, DB commands, Google Cloud and the `vercel env pull` hazard: `docs/setup.md`.
 
+For container deployment, see [Docker deployment](setup.md#docker-deployment).
+`docker-compose.prod.yml` reads `POSTGRES_PASSWORD`, `HTTP_PORT`, and `HTTP_BIND` for container configuration only.
+These variables do not enter the application validation schema or Turbo tasks.
+Compose provides the database connection and agent address on its private network.
+The web image compiles its API proxy target as `http://api:3001`.
+Runtime `API_URL` remains the public OAuth origin and defaults to `APP_URL` in Compose.
+
 ## One `.env`, at the repo root
 
 `.env.example` **is the documentation** — every variable the repo reads, with a note,
