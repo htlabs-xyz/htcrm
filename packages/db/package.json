@@ -24,7 +24,10 @@
 		"./settings": "./src/settings.ts",
 		"./slack-inventory": "./src/slack-inventory.ts",
 		"./tracking": "./src/tracking.ts",
-		"./workspace": "./src/workspace.ts"
+		"./workspace": "./src/workspace.ts",
+		"./ai-provider": "./src/ai-provider.ts",
+		"./ai-provider-config": "./src/ai-provider-config.ts",
+		"./ai-provider-http": "./src/ai-provider-http.ts"
 	},
 	"scripts": {
 		"build": "prisma generate",

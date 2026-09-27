@@ -90,7 +90,7 @@ whose event never arrived, which cannot be recovered.
 | `node_version` | Major only, e.g. `22` |
 | `postgres_version` | Major only, e.g. `17` |
 | `members_bucket` | How many people work here, in bands |
-| `agent_model_id` | The model chosen on Settings → General, e.g. `zai/glm-5.2-fast` |
+| `agent_model_id` | The configured provider model on Settings → General, or null when incomplete |
 | `agent_model_context_window` | Its context window in tokens |
 | `seed_only` | True when every contact came from `bun run db:seed` |
 
@@ -326,3 +326,7 @@ design. A capture in there would hang and then fail.
 2. Add a row to the table above.
 3. If it is an open set of keys — a tool, a method, a route — give it a `permitted*` function so
    the keys are constrained too, not just the property name.
+
+The legacy property name `cap_ai_gateway` now reports whether the shared OpenAI-compatible configuration is complete.
+Model-error events use the session's pinned model ID, with no process-wide default model cache.
+It does not establish successful inference or report an endpoint or key.

@@ -12,7 +12,7 @@ import {
 import { requireSession } from "@/lib/session";
 import { HydrateClient } from "@/lib/trpc/hydrate";
 import { getServerQueryClient, getServerTrpc } from "@/lib/trpc/server";
-import { AgentModel } from "./agent-model";
+import { AiProvider } from "./ai-provider";
 import { ArchiveRetention } from "./archive-retention";
 import { ResearchKey } from "./research-key";
 import { WorkspaceForm } from "./workspace-form";
@@ -50,8 +50,7 @@ async function Settings() {
 
 	await Promise.all([
 		queryClient.prefetchQuery(trpc.workspace.get.queryOptions()),
-		queryClient.prefetchQuery(trpc.settings.agentModel.queryOptions()),
-		queryClient.prefetchQuery(trpc.settings.modelCatalog.queryOptions()),
+		queryClient.prefetchQuery(trpc.settings.aiProvider.queryOptions()),
 		queryClient.prefetchQuery(trpc.settings.researchKey.queryOptions()),
 		queryClient.prefetchQuery(trpc.settings.archiveRetention.queryOptions()),
 	]);
@@ -62,7 +61,7 @@ async function Settings() {
 				<WorkspaceForm />
 				<ResearchKey />
 				<ArchiveRetention />
-				<AgentModel />
+				<AiProvider />
 			</div>
 		</HydrateClient>
 	);

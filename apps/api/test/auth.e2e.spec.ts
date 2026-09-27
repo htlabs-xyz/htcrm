@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import type { INestApplication } from "@nestjs/common";
 import { Test, type TestingModule } from "@nestjs/testing";
 import request from "supertest";
+import { SettingsService } from "../src/settings/settings.service";
 
 const fallback = (key: string, value: string) => {
 	if (!process.env[key]) {
@@ -77,5 +78,31 @@ describe("Auth (e2e)", () => {
 		);
 
 		expect(response.status).toBe(401);
+	});
+	it("protects AI provider configuration and catalog requests", async () => {
+		await request(app.getHttpServer())
+			.get("/api/trpc/settings.aiProvider")
+			.expect(401);
+		await request(app.getHttpServer())
+			.post("/api/trpc/settings.setAiProvider")
+			.send({})
+			.expect(401);
+		await request(app.getHttpServer())
+			.post("/api/trpc/settings.providerModels")
+			.send({})
+			.expect(401);
+		await request(app.getHttpServer())
+			.post("/api/trpc/settings.removeAiProvider")
+			.send({})
+			.expect(401);
+	});
+	it("rejects a legacy gateway reset without changing the provider", async () => {
+		const settings = app.get(SettingsService);
+		const before = await settings.agentModel();
+		await expect(settings.setAgentModel(null)).rejects.toThrow(
+			"There is no default gateway model",
+		);
+		expect(await settings.agentModel()).toEqual(before);
+		expect(before.defaultId).toBeNull();
 	});
 });

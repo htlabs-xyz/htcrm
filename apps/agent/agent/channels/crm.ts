@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { EnrichmentStatus, Prisma } from "@crm/db";
 import { MAX_ATTEMPTS } from "@crm/db/agent-tasks";
 import { schemas } from "@crm/validation";
+import { aiProviderInput } from "@crm/validation/ai-provider";
 import { eveTurnFailure } from "@crm/validation/eve-stream";
 import { defineChannel, GET, POST } from "eve/channels";
 import { z } from "zod";
@@ -33,6 +34,7 @@ import { attribute } from "../lib/session-purpose";
 import { createSlackChannel } from "../lib/slack-membership";
 import { reconcileStaleTasks } from "../lib/stale-tasks";
 import { completeTask, taskSubject } from "../lib/tasks";
+import { verifyAiProvider } from "../lib/verify-ai-provider";
 
 const TASK_MARKER = "task:";
 const STALE_QUEUE_MS = DISPATCH.sweep.staleQueueMs;
@@ -217,6 +219,22 @@ export default defineChannel({
 			return "error" in outcome
 				? Response.json({ error: outcome.error }, { status: 422 })
 				: Response.json({ channel: outcome });
+		}),
+
+		POST("/internal/crm/verify-ai-provider", async (request) => {
+			if (!authorised(request))
+				return new Response("Unauthorized", { status: 401 });
+			const parsed = aiProviderInput.safeParse(
+				await request.json().catch(() => null),
+			);
+			if (!parsed.success || !parsed.data.apiKey)
+				return Response.json(
+					{ ok: false, message: "Invalid AI provider configuration." },
+					{ status: 400 },
+				);
+			return Response.json(
+				await verifyAiProvider({ ...parsed.data, apiKey: parsed.data.apiKey }),
+			);
 		}),
 
 		POST("/internal/crm/verify-key", async (request) => {

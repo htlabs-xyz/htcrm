@@ -8,7 +8,7 @@ import {
 	RecordSource,
 } from "@crm/db";
 import { RETIRED_OUTCOME } from "@crm/db/agent-tasks";
-import { readAgentModel } from "@crm/db/settings";
+import { aiProviderModel, readAiProvider } from "@crm/db/ai-provider";
 import { CONTACT_CAP_REASON } from "@crm/db/tracking";
 import { WORKSPACE_ID } from "@crm/db/workspace";
 import {
@@ -136,11 +136,15 @@ export class RollupService {
 	private async shape(): Promise<Properties> {
 		const [model, members, ssoProviders, postgres, contextKey] =
 			await Promise.all([
-				readAgentModel(this.db).catch(() => null),
+				readAiProvider(this.db)
+					.then(aiProviderModel)
+					.catch(() => null),
 				this.db.member.count({ where: { organizationId: WORKSPACE_ID } }),
 				this.db.ssoProvider.count(),
 				this.postgresMajor(),
-				this.db.appSetting.findFirst({ select: { contextDevApiKey: true } }),
+				this.db.appSetting.findFirst({
+					select: { contextDevApiKey: true },
+				}),
 			]);
 
 		return {
@@ -155,13 +159,13 @@ export class RollupService {
 			cap_redis: isSet("REDIS_URL"),
 			cap_agent_bridge: isSet("AGENT_BRIDGE_SECRET"),
 			cap_cron_secret: isSet("CRON_SECRET"),
-			cap_ai_gateway: isSet("AI_GATEWAY_API_KEY"),
+			cap_ai_gateway: Boolean(model),
 			cap_google_oauth:
 				isSet("GOOGLE_CLIENT_ID") && isSet("GOOGLE_CLIENT_SECRET"),
 			cap_sso_provider: ssoProviders > 0,
 			is_marketing: process.env.IS_MARKETING === "true",
 
-			agent_model_id: model?.id ?? null,
+			agent_model_id: model?.modelId ?? null,
 			agent_model_context_window: model?.contextWindowTokens ?? null,
 		};
 	}

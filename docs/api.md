@@ -31,6 +31,19 @@ so the row survives the agent being down.
 About to add a vendor client to `apps/api`? You want `apps/agent/agent/lib`. One
 documented exception, for timing: the exchange-rate fetcher, below.
 
+AI provider settings are shared by the workspace, with the existing authenticated
+access policy of research-key and agent-model settings. `settings.aiProvider`,
+`setAiProvider`, `providerModels` and `removeAiProvider` own the configuration.
+The API may fetch `/models` metadata; inference verification runs through the
+authenticated Agent bridge at `/internal/crm/verify-ai-provider`. A successful
+streamed tool round trip is required before saving, and a revision check rejects
+stale writes. Keys are encrypted and never returned by settings reads.
+
+The legacy `agentModel` read returns nullable effective/default IDs when no
+provider is configured; there is no gateway default. `setAgentModel(null)` is
+rejected without changing configuration. Configure or remove the entire provider
+through the new settings procedures.
+
 ## One organization, and it is not a tenancy boundary
 
 Single tenant. No org header, no org interceptor, no org-scoped cache keys, **no

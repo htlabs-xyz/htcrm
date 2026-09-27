@@ -1,10 +1,11 @@
+import { AI_PROVIDER } from "@crm/db/ai-provider-config";
 import "@crm/env/load";
 
-import { DEFAULT_AGENT_MODEL } from "@crm/db/settings";
 import { onTelemetryProblem, syncVersion } from "@crm/telemetry";
 import { defineAgent, defineDynamic } from "eve";
 import { logCapabilities } from "./lib/capabilities";
-import { selectedModel } from "./lib/model";
+import { unavailableModel } from "./lib/openai-compatible-model";
+import { providerSessionModel } from "./lib/provider-session-model";
 
 void logCapabilities();
 
@@ -13,9 +14,10 @@ onTelemetryProblem((message) => console.debug(`[telemetry] ${message}`));
 void syncVersion();
 
 export default defineAgent({
+	modelContextWindowTokens: AI_PROVIDER.unconfiguredContextTokens,
 	model: defineDynamic({
-		fallback: DEFAULT_AGENT_MODEL.id,
-		events: { "session.started": () => selectedModel() },
+		fallback: unavailableModel(),
+		events: { "step.started": () => providerSessionModel() },
 	}),
 	limits: {
 		maxInputTokensPerSession: 500_000,
